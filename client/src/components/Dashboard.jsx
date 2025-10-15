@@ -31,6 +31,7 @@ export function Dashboard({
 }) {
   const queryClient = useQueryClient();
   const isOwner = user.role === 'owner';
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const { data: stageResponse } = useQuery({
     queryKey: ['stages', project.id],
@@ -225,6 +226,11 @@ export function Dashboard({
   const inviteDisabled = inviteMutation.isPending || inviteOptions.length === 0;
   const inviteLabel = inviteRole === 'staff' ? 'staff member' : 'client';
 
+  const handleSectionSelect = key => {
+    onSectionChange?.(key);
+    setIsMobileMenuOpen(false);
+  };
+
   const navItems = useMemo(() => {
     const items = [{ key: 'dashboard', label: 'Dashboard' }];
     if (isOwner) {
@@ -242,6 +248,10 @@ export function Dashboard({
 
   const effectiveSection = isOwner ? activeSection : 'dashboard';
 
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [effectiveSection]);
+
   return (
     <div className="min-h-screen bg-slate-100">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8 lg:grid lg:grid-cols-[280px,1fr] lg:gap-8">
@@ -257,7 +267,7 @@ export function Dashboard({
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => onSectionChange?.(item.key)}
+                  onClick={() => handleSectionSelect(item.key)}
                   className={clsx(
                     'flex w-full items-center justify-between rounded-xl px-4 py-3 transition',
                     isActive
@@ -280,6 +290,49 @@ export function Dashboard({
         </aside>
 
         <main className="flex flex-col gap-8">
+          <div className="lg:hidden">
+            <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-slate-200 shadow-sm">
+              <div className="flex items-center gap-3">
+                <img src={logoMark} alt="Exhibit Control" className="h-10 w-auto" />
+                <div>
+                  <p className="text-sm font-semibold text-white">Client Portal</p>
+                  <p className="text-xs text-slate-400">Navigate sections</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(open => !open)}
+                className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white"
+                aria-expanded={isMobileMenuOpen}
+              >
+                {isMobileMenuOpen ? 'Close' : 'Menu'}
+              </button>
+            </div>
+            {isMobileMenuOpen && (
+              <nav className="mt-3 space-y-2 rounded-2xl bg-slate-900 p-4 text-sm text-slate-200 shadow-sm">
+                {navItems.map(item => {
+                  const isActive = effectiveSection === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => handleSectionSelect(item.key)}
+                      className={clsx(
+                        'flex w-full items-center justify-between rounded-xl px-4 py-3 transition',
+                        isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                      )}
+                    >
+                      {item.label}
+                      {isActive && (
+                        <span className="text-xs uppercase text-indigo-200">Active</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+          </div>
+
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-slate-500">Welcome back</p>
