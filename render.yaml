@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ec-exhibits-server
+    env: node
+    plan: free
+    repo: https://github.com/media-code-now/ec-exhibits
+    branch: main
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm run start
+    autoDeploy: true
+    rootDir: server

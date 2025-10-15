@@ -5,7 +5,11 @@
   "description": "Express + Socket.IO server for EC Exhibits client portal prototype",
   "main": "index.js",
   "scripts": {
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20.12.2"
   },
   "dependencies": {
     "cors": "^2.8.5",
