@@ -291,7 +291,7 @@ export function Dashboard({
 
         <main className="flex flex-col gap-8">
           <div className="lg:hidden">
-            <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-slate-200 shadow-sm">
+            <div className="sticky top-6 z-30 flex items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-slate-200 shadow-lg shadow-slate-900/20">
               <div className="flex items-center gap-3">
                 <img src={logoMark} alt="Exhibit Control" className="h-10 w-auto" />
                 <div>
@@ -302,34 +302,68 @@ export function Dashboard({
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(open => !open)}
-                className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-white/10"
                 aria-expanded={isMobileMenuOpen}
               >
-                {isMobileMenuOpen ? 'Close' : 'Menu'}
+                <span>{isMobileMenuOpen ? 'Close' : 'Menu'}</span>
+                <span aria-hidden="true">
+                  {isMobileMenuOpen ? (
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18l12-12" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  )}
+                </span>
               </button>
             </div>
             {isMobileMenuOpen && (
-              <nav className="mt-3 space-y-2 rounded-2xl bg-slate-900 p-4 text-sm text-slate-200 shadow-sm">
-                {navItems.map(item => {
-                  const isActive = effectiveSection === item.key;
-                  return (
+              <div
+                className="fixed inset-0 z-40 flex items-start justify-center bg-slate-950/70 px-4 pt-24"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <div
+                  className="w-full max-w-sm rounded-3xl bg-slate-900 p-6 text-slate-200 shadow-2xl shadow-slate-900/50"
+                  onClick={event => event.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-widest text-slate-400">Quick Access</p>
+                      <p className="text-lg font-semibold text-white">Choose a section</p>
+                    </div>
                     <button
-                      key={item.key}
                       type="button"
-                      onClick={() => handleSectionSelect(item.key)}
-                      className={clsx(
-                        'flex w-full items-center justify-between rounded-xl px-4 py-3 transition',
-                        isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                      )}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/10"
                     >
-                      {item.label}
-                      {isActive && (
-                        <span className="text-xs uppercase text-indigo-200">Active</span>
-                      )}
+                      Close
                     </button>
-                  );
-                })}
-              </nav>
+                  </div>
+                  <nav className="mt-6 space-y-2 text-sm">
+                    {navItems.map(item => {
+                      const isActive = effectiveSection === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => handleSectionSelect(item.key)}
+                          className={clsx(
+                            'flex w-full items-center justify-between rounded-xl px-4 py-3 transition',
+                            isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                          )}
+                        >
+                          {item.label}
+                          {isActive && (
+                            <span className="text-xs uppercase text-indigo-200">Active</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </div>
+              </div>
             )}
           </div>
 
