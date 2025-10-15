@@ -6,6 +6,8 @@ import logoMark from './assets/exhibit-control-logo.svg';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 axios.defaults.baseURL = API_URL;
 
+const BUILD_SHA = process.env.VITE_BUILD_SHA || 'dev';
+
 const demoUsers = [
   { id: 'user-owner', label: 'Olivia Owner' },
   { id: 'user-staff', label: 'Samuel Staff' },
@@ -83,6 +85,7 @@ export default function App() {
           <p className="text-xs text-slate-400">
             Start the server with <code>npm run dev</code> inside <code>server/</code>
           </p>
+          <p className="mt-2 text-[10px] text-slate-300">BUILD: {BUILD_SHA}</p>
         </div>
       </div>
     );
