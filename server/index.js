@@ -24,6 +24,9 @@ fs.mkdirSync(uploadDir, { recursive: true });
 
 let io;
 
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
 function emitNotificationSummary(userId) {
   if (!io) return;
   const summary = notificationStore.summary(userId);
@@ -34,7 +37,7 @@ function emitNotificationSummaries(userIds) {
   [...new Set(userIds)].forEach(emitNotificationSummary);
 }
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.use(cors({ origin: ALLOWED_ORIGIN, credentials: true }));
 app.use(express.json());
 
 // Demo endpoint to get tokens for mock users
@@ -177,8 +180,8 @@ app.post('/projects', (req, res) => {
         invitedById: req.user.id,
         role: roleForInvite
       });
-      if (recipient?.email) {
-        const inviteLink = `http://localhost:5173/invite/${invite.id}`;
+        if (recipient?.email) {
+          const inviteLink = `${CLIENT_URL.replace(/\/$/, '')}/invite/${invite.id}`;
         emailService.sendInvite({
           to: recipient.email,
           projectName: project.name,
@@ -258,7 +261,7 @@ app.post('/projects/:projectId/invite', (req, res) => {
     });
     const recipient = getUser(userId);
     if (recipient?.email) {
-      const inviteLink = `http://localhost:5173/invite/${invite.id}`;
+      const inviteLink = `${CLIENT_URL.replace(/\/$/, '')}/invite/${invite.id}`;
       emailService.sendInvite({
         to: recipient.email,
         projectName: updated.name,
@@ -577,7 +580,7 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
 
 const httpServer = http.createServer(app);
 io = new Server(httpServer, {
-  cors: { origin: 'http://localhost:5173', credentials: true }
+  cors: { origin: ALLOWED_ORIGIN, credentials: true }
 });
 io.use(authMiddleware.socket);
 
