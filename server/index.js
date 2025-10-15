@@ -27,6 +27,15 @@ let io;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
+// Allow the configured origin and local dev origins (localhost on any port).
+function corsOriginHandler(origin, callback) {
+  // No origin (curl/postman) -> allow
+  if (!origin) return callback(null, true);
+  if (origin === ALLOWED_ORIGIN) return callback(null, true);
+  if (/^https?:\/\/localhost(?::\d+)?$/.test(origin)) return callback(null, true);
+  return callback(new Error('Not allowed by CORS'), false);
+}
+
 function emitNotificationSummary(userId) {
   if (!io) return;
   const summary = notificationStore.summary(userId);
@@ -37,8 +46,34 @@ function emitNotificationSummaries(userIds) {
   [...new Set(userIds)].forEach(emitNotificationSummary);
 }
 
-app.use(cors({ origin: ALLOWED_ORIGIN, credentials: true }));
-app.use(express.json());
+app.use(cors({ origin: corsOriginHandler, credentials: true }));
+
+// Use a small middleware that logs and parses the raw body for the /auth/token route
+// This helps diagnose malformed JSON from clients. Other routes use the standard express.json().
+const defaultJson = express.json();
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.url === '/auth/token') {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => (raw += chunk));
+    req.on('end', () => {
+      console.log('[DEBUG] /auth/token raw body:', raw);
+      try {
+        req.body = raw ? JSON.parse(raw) : {};
+        next();
+      } catch (err) {
+        console.error('[DEBUG] JSON parse error for /auth/token:', err, 'raw:', raw);
+        return res.status(400).json({ error: 'Invalid JSON' });
+      }
+    });
+    req.on('error', err => {
+      console.error('[DEBUG] req error on /auth/token:', err);
+      return res.status(400).json({ error: 'Invalid request body' });
+    });
+  } else {
+    return defaultJson(req, res, next);
+  }
+});
 
 // Demo endpoint to get tokens for mock users
 app.post('/auth/token', (req, res) => {
@@ -580,7 +615,7 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
 
 const httpServer = http.createServer(app);
 io = new Server(httpServer, {
-  cors: { origin: ALLOWED_ORIGIN, credentials: true }
+  cors: { origin: corsOriginHandler, credentials: true }
 });
 io.use(authMiddleware.socket);
 
