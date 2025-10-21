@@ -6,7 +6,8 @@ import logoMark from './assets/exhibit-control-logo.svg';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 axios.defaults.baseURL = API_URL;
 
-const BUILD_SHA = process.env.VITE_BUILD_SHA || 'dev';
+// Vite exposes env vars on import.meta.env (VITE_ prefix preserved).
+const BUILD_SHA = import.meta.env.VITE_BUILD_SHA || 'dev';
 
 const demoUsers = [
   { id: 'user-owner', label: 'Olivia Owner' },
