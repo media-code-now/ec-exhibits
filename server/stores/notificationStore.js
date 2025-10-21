@@ -79,6 +79,18 @@ function formatProjectChange(change) {
     const label = statusLabels[change.status] ?? change.status;
     return `Task "${change.taskTitle}" marked ${label}.`;
   }
+  if (change.type === 'task_completed') {
+    return `Task "${change.taskTitle}" completed in ${change.stageName}.`;
+  }
+  if (change.type === 'client_upload') {
+    const count = change.count ?? 1;
+    const label = count === 1 ? 'a file' : `${count} files`;
+    return `Client uploaded ${label}.`;
+  }
+  if (change.type === 'invoice_status') {
+    const label = change.paymentConfirmed ? 'marked paid' : 'marked unpaid';
+    return `Invoice "${change.invoiceNumber ?? 'Invoice'}" ${label}.`;
+  }
   return 'Project updated.';
 }
 

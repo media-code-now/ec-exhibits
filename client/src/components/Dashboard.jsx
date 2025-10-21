@@ -9,14 +9,8 @@ import { InvoicesCard } from './InvoicesCard.jsx';
 import { FilesCard } from './FilesCard.jsx';
 import { FileDropzone } from './FileDropzone.jsx';
 import logoMark from '../assets/exhibit-control-logo.svg';
-
-const invoiceSeed = {
-  'proj-1': [
-    { id: 'inv-101', number: 'INV-101', dueDate: 'May 15', amount: '12,500', currency: 'USD', stage: 'Design', paymentConfirmed: false },
-    { id: 'inv-100', number: 'INV-100', dueDate: 'Apr 10', amount: '5,000', currency: 'USD', stage: 'Discovery', paymentConfirmed: true }
-  ],
-  'proj-2': [{ id: 'inv-201', number: 'INV-201', dueDate: 'Jun 01', amount: '3,200', currency: 'USD', stage: 'Planning', paymentConfirmed: false }]
-};
+import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
+import { ChecklistPanel } from './ChecklistPanel.jsx';
 
 export function Dashboard({
   user,
@@ -31,12 +25,22 @@ export function Dashboard({
 }) {
   const queryClient = useQueryClient();
   const isOwner = user.role === 'owner';
+  const isStaff = user.role === 'staff';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const { data: stageResponse } = useQuery({
     queryKey: ['stages', project.id],
     queryFn: async () => {
       const { data } = await axios.get(`/projects/${project.id}/stages`);
+      return data;
+    },
+    enabled: Boolean(project?.id)
+  });
+
+  const { data: invoiceResponse } = useQuery({
+    queryKey: ['invoices', project.id],
+    queryFn: async () => {
+      const { data } = await axios.get(`/projects/${project.id}/invoices`);
       return data;
     },
     enabled: Boolean(project?.id)
@@ -63,6 +67,16 @@ export function Dashboard({
       axios.patch(`/projects/${project.id}/stages/${stageId}/tasks/${taskId}`, { state }),
     onSuccess: () => {
       queryClient.invalidateQueries(['stages', project.id]);
+    }
+  });
+
+  const updateInvoiceStatusMutation = useMutation({
+    mutationFn: ({ invoiceId, paymentConfirmed }) =>
+      axios
+        .patch(`/projects/${project.id}/invoices/${invoiceId}`, { paymentConfirmed })
+        .then(({ data }) => data.invoice),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['invoices', project.id]);
     }
   });
 
@@ -134,10 +148,12 @@ export function Dashboard({
     }
   });
 
-  const invoices = useMemo(() => invoiceSeed[project?.id] ?? [], [project?.id]);
+  const invoices = invoiceResponse?.invoices ?? [];
   const stages = stageResponse?.stages ?? [];
   const statuses = stageResponse?.statuses ?? ['not_started', 'in_progress', 'completed'];
   const taskStatuses = stageResponse?.taskStatuses ?? ['not_started', 'in_progress', 'blocked', 'completed'];
+  const progressSummary = stageResponse?.progress;
+  const canManageChecklist = isOwner || isStaff;
 
   const directory = userDirectory?.users ?? [];
   const clients = useMemo(
@@ -225,6 +241,15 @@ export function Dashboard({
   const inviteOptions = inviteRole === 'client' ? invitableClients : invitableStaff;
   const inviteDisabled = inviteMutation.isPending || inviteOptions.length === 0;
   const inviteLabel = inviteRole === 'staff' ? 'staff member' : 'client';
+  const canManageInvoices = user.role !== 'client';
+
+  const handleInvoiceToggle = invoice => {
+    if (updateInvoiceStatusMutation.isPending) return;
+    updateInvoiceStatusMutation.mutate({
+      invoiceId: invoice.id,
+      paymentConfirmed: !invoice.paymentConfirmed
+    });
+  };
 
   const handleSectionSelect = key => {
     onSectionChange?.(key);
@@ -233,20 +258,38 @@ export function Dashboard({
 
   const navItems = useMemo(() => {
     const items = [{ key: 'dashboard', label: 'Dashboard' }];
+    items.push({ key: 'files', label: 'Files' });
+    if (isOwner || isStaff) {
+      items.push({ key: 'checklist', label: 'Checklist' });
+    }
     if (isOwner) {
       items.push({ key: 'projects', label: 'Projects' });
+      items.push({ key: 'template', label: 'Template' });
       items.push({ key: 'users', label: 'Users' });
     }
     return items;
-  }, [isOwner]);
+  }, [isOwner, isStaff]);
+
+  const allowedSections = useMemo(() => {
+    const set = new Set(['dashboard', 'files']);
+    if (isOwner || isStaff) {
+      set.add('checklist');
+    }
+    if (isOwner) {
+      set.add('projects');
+      set.add('template');
+      set.add('users');
+    }
+    return set;
+  }, [isOwner, isStaff]);
 
   useEffect(() => {
-    if (!isOwner && activeSection !== 'dashboard') {
+    if (!allowedSections.has(activeSection)) {
       onSectionChange?.('dashboard');
     }
-  }, [isOwner, activeSection, onSectionChange]);
+  }, [allowedSections, activeSection, onSectionChange]);
 
-  const effectiveSection = isOwner ? activeSection : 'dashboard';
+  const effectiveSection = allowedSections.has(activeSection) ? activeSection : 'dashboard';
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -411,12 +454,18 @@ export function Dashboard({
                   stages={stages}
                   statuses={statuses}
                   taskStatuses={taskStatuses}
+                  progressSummary={progressSummary}
                   canEdit={false}
                 />
                 <ProjectChat projectId={project.id} token={token} currentUser={user} />
               </div>
               <div className="space-y-8">
-                <InvoicesCard invoices={invoices} />
+                <InvoicesCard
+                  invoices={invoices}
+                  canEdit={canManageInvoices}
+                  onTogglePayment={handleInvoiceToggle}
+                  isUpdating={updateInvoiceStatusMutation.isPending}
+                />
                 <FilesCard projectId={project.id} />
                 <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
                   <h3 className="text-base font-semibold text-slate-900">Upload Invoice or Project Files</h3>
@@ -425,6 +474,25 @@ export function Dashboard({
                 </div>
               </div>
             </section>
+          )}
+
+          {effectiveSection === 'files' && (
+            <section className="space-y-8">
+              <FilesCard projectId={project.id} />
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+                <h3 className="text-base font-semibold text-slate-900">Upload Files</h3>
+                <p className="mb-4 text-sm text-slate-500">Drag and drop documents to share with the team.</p>
+                <FileDropzone projectId={project.id} />
+              </div>
+            </section>
+          )}
+
+          {effectiveSection === 'checklist' && (
+            <ChecklistPanel projectId={project.id} stages={stages} canEdit={canManageChecklist} />
+          )}
+
+          {effectiveSection === 'template' && isOwner && (
+            <TemplateAdminPanel canEdit={isOwner} />
           )}
 
           {effectiveSection === 'projects' && isOwner && (
@@ -571,6 +639,7 @@ export function Dashboard({
                     stages={stages}
                     statuses={statuses}
                     taskStatuses={taskStatuses}
+                    progressSummary={progressSummary}
                     canEdit={isOwner}
                     onStatusChange={(stageId, status) => stageMutation.mutate({ stageId, status })}
                     onTaskCreate={(stageId, draft) =>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import clsx from 'clsx';
 import { getSocket } from '../hooks/socketSingleton.js';
@@ -21,6 +21,7 @@ const categoryLabels = {
 export function NotificationBell({ token, projects = [] }) {
   const [summary, setSummary] = useState(emptySummary);
   const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
 
   const projectLookup = useMemo(
     () => Object.fromEntries(projects.map(project => [project.id, project.name])),
@@ -141,8 +142,24 @@ export function NotificationBell({ token, projects = [] }) {
     await refreshSummary();
   };
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClickOutside = event => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={toggleOpen}

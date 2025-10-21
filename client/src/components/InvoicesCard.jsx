@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 
-export function InvoicesCard({ invoices = [] }) {
+export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, isUpdating = false }) {
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">
       <header className="flex items-center justify-between">
@@ -34,6 +34,21 @@ export function InvoicesCard({ invoices = [] }) {
               >
                 {invoice.paymentConfirmed ? 'Yes' : 'No'}
               </span>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => onTogglePayment?.(invoice)}
+                  className={clsx(
+                    'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide transition',
+                    invoice.paymentConfirmed
+                      ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                  )}
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? 'Updating…' : invoice.paymentConfirmed ? 'Mark unpaid' : 'Mark paid'}
+                </button>
+              )}
             </div>
           </article>
         ))}

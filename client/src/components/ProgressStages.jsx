@@ -20,6 +20,7 @@ export function ProgressStages({
   stages = [],
   statuses = [],
   taskStatuses = [],
+  progressSummary = null,
   canEdit = false,
   onStatusChange,
   onTaskStatusChange,
@@ -50,14 +51,24 @@ export function ProgressStages({
   };
 
   const completed = stages.filter(stage => stage.status === 'completed').length;
-  const percent = Math.round((completed / stages.length) * 100);
+  const percentFallback = Math.round((completed / stages.length) * 100) || 0;
+  const percent = progressSummary?.percentComplete ?? percentFallback;
+  const taskSummaryLabel = (() => {
+    if (progressSummary && progressSummary.totalTasks > 0) {
+      return `${progressSummary.completedTasks}/${progressSummary.totalTasks} tasks complete · ${progressSummary.completedStages}/${progressSummary.totalStages} stages finished`;
+    }
+    if (stages.length) {
+      return `Completed ${completed} of ${stages.length} stages`;
+    }
+    return 'Track each stage through completion';
+  })();
 
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Project Progress</h2>
-          <p className="text-sm text-slate-500">Track each stage through completion</p>
+          <p className="text-sm text-slate-500">{taskSummaryLabel}</p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-600">
           {percent}% Complete
@@ -81,18 +92,32 @@ export function ProgressStages({
           >
             <span className="h-2.5 w-2.5 rounded-full bg-current" />
             {stage.name}
+            {typeof stage.progressPercent === 'number' && stage.progressPercent > 0 && (
+              <span className="text-xs text-indigo-600">{stage.progressPercent}%</span>
+            )}
           </li>
         ))}
       </ol>
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
         {stages.map(stage => (
-          <details key={stage.id} className="group" open={stage.status !== 'completed'}>
+          <details key={stage.id} className="group">
             <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-700">
               <div>
                 <p>{stage.name}</p>
                 <p className="text-xs text-slate-500">
                   {stage.dueDate ? `Due ${new Date(stage.dueDate).toLocaleDateString()}` : 'No due date'}
                 </p>
+                {stage.progress && stage.progress.overdueTasks > 0 && (
+                  <p className="flex items-center gap-1 text-xs font-semibold text-rose-600">
+                    <span aria-hidden>⚠️</span>
+                    {stage.progress.overdueTasks} overdue
+                  </p>
+                )}
+                {stage.progress && stage.progress.totalTasks > 0 && (
+                  <p className="text-xs text-slate-400">
+                    {stage.progress.completedTasks}/{stage.progress.totalTasks} tasks complete
+                  </p>
+                )}
               </div>
               {canEdit ? (
                 <select
@@ -122,9 +147,30 @@ export function ProgressStages({
               )}
             </summary>
             <div className="space-y-3 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              {stage.progress && stage.progress.totalTasks > 0 && (
+                <div>
+                  <div className="mb-2 h-2 w-full rounded-full bg-white">
+                    <span
+                      className="block h-2 rounded-full bg-indigo-400"
+                      style={{ width: `${stage.progress.percentComplete}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {stage.progress.completedTasks}/{stage.progress.totalTasks} tasks complete · {stage.progress.percentComplete}%
+                  </p>
+                </div>
+              )}
               {stage.tasks?.length ? (
                 stage.tasks.map(task => (
-                  <div key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-transparent p-2 hover:border-slate-200">
+                  <div
+                    key={task.id}
+                    className={clsx(
+                      'flex flex-wrap items-center justify-between gap-3 rounded-lg border p-2 transition',
+                      task.isOverdue
+                        ? 'border-rose-300 bg-rose-50 hover:border-rose-400'
+                        : 'border-transparent hover:border-slate-200'
+                    )}
+                  >
                     <div className="flex items-center gap-2">
                       <span
                         className={clsx(
@@ -143,7 +189,14 @@ export function ProgressStages({
                       <div>
                         <p className="font-medium text-slate-700">{task.title}</p>
                         {task.dueDate && (
-                          <p className="text-xs text-slate-500">Due {new Date(task.dueDate).toLocaleDateString()}</p>
+                          <p className={clsx('text-xs', task.isOverdue ? 'text-rose-600 font-semibold' : 'text-slate-500')}>
+                            Due {new Date(task.dueDate).toLocaleDateString()}
+                          </p>
+                        )}
+                        {task.isOverdue && (
+                          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-rose-600">
+                            <span aria-hidden>⏰</span> Overdue
+                          </p>
                         )}
                       </div>
                     </div>

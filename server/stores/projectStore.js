@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getUser } from '../lib/users.js';
+import { stageStore } from './stageStore.js';
+import { invoiceStore } from './invoiceStore.js';
 
 const projectData = new Map([
   [
@@ -79,6 +81,8 @@ export const projectStore = {
       createdAt: new Date().toISOString()
     };
     projectData.set(id, project);
+    stageStore.seedProjectStages(id);
+    invoiceStore.seedProjectInvoices(id);
     return serialise(project);
   },
   addMember({ projectId, userId, role }) {

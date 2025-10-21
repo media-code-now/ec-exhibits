@@ -11,6 +11,8 @@ import { getUser, listUsers, addUser, removeUser } from './lib/users.js';
 import { emailService } from './lib/email.js';
 import { projectStore } from './stores/projectStore.js';
 import { stageStore, stageStatuses, taskStatuses } from './stores/stageStore.js';
+import { checklistStore } from './stores/checklistStore.js';
+import { invoiceStore } from './stores/invoiceStore.js';
 import { inviteStore } from './stores/inviteStore.js';
 import { messageStore } from './stores/messageStore.js';
 import { notificationStore } from './stores/notificationStore.js';
@@ -187,6 +189,30 @@ app.get('/me', (req, res) => {
   res.json({ user: req.user, projects: projectStore.listForUser(req.user.id) });
 });
 
+app.get('/template/stages', (req, res) => {
+  const template = stageStore.getTemplateDefinition();
+  res.json({
+    template: { stages: template },
+    canEdit: req.user.role === 'owner'
+  });
+});
+
+app.put('/template/stages', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Only owners can update the template' });
+  }
+  try {
+    const { stages } = req.body ?? {};
+    if (!Array.isArray(stages) || stages.length === 0) {
+      throw new Error('A non-empty stages array is required');
+    }
+    const template = stageStore.replaceTemplateDefinition(stages);
+    res.json({ template: { stages: template } });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.post('/projects', (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can create projects' });
@@ -200,10 +226,6 @@ app.post('/projects', (req, res) => {
       clientIds,
       staffIds
     });
-    // Seed with initial planning stage
-    if (stageStore.list(project.id).length === 0) {
-      stageStore.create({ projectId: project.id, name: 'Planning', dueDate: null });
-    }
 
     const inviteTargets = [...new Set([...clientIds, ...staffIds])];
     const inviteMeta = inviteTargets.map(targetId => {
@@ -396,7 +418,8 @@ app.get('/projects/:projectId/stages', (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const stages = stageStore.list(projectId);
-  res.json({ stages, statuses: stageStatuses, taskStatuses });
+  const progress = stageStore.projectProgress(projectId);
+  res.json({ stages, statuses: stageStatuses, taskStatuses, progress });
 });
 
 app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
@@ -410,6 +433,7 @@ app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
   }
   try {
     const stage = stageStore.updateStatus({ projectId, stageId, status });
+    const progress = stageStore.projectProgress(projectId);
     const memberIds = project.members.map(member => member.userId);
     notificationStore.bumpProjectChange({
       projectId,
@@ -424,7 +448,7 @@ app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
       emitNotificationSummaries(recipients);
     }
     emitNotificationSummary(req.user.id);
-    res.json({ stage });
+    res.json({ stage, progress });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -443,6 +467,8 @@ app.post('/projects/:projectId/stages/:stageId/tasks', (req, res) => {
     const stageSnapshot = stageStore.list(projectId).find(item => item.id === stageId);
     const stageName = stageSnapshot?.name ?? 'Stage';
     const task = stageStore.addTask({ projectId, stageId, title, dueDate, assignee });
+    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
+    const progress = stageStore.projectProgress(projectId);
     const memberIds = project.members.map(member => member.userId);
     notificationStore.bumpProjectChange({
       projectId,
@@ -457,7 +483,7 @@ app.post('/projects/:projectId/stages/:stageId/tasks', (req, res) => {
       emitNotificationSummaries(recipients);
     }
     emitNotificationSummary(req.user.id);
-    res.status(201).json({ task });
+    res.status(201).json({ task, stage: updatedStage, progress });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -477,7 +503,119 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', (req, res) => {
     const taskSnapshot = stageSnapshot?.tasks?.find(item => item.id === taskId);
     const stageName = stageSnapshot?.name ?? 'Stage';
     const taskTitle = taskSnapshot?.title ?? 'Task';
+    const wasCompleted = taskSnapshot?.state === 'completed';
     const task = stageStore.updateTaskStatus({ projectId, stageId, taskId, state });
+    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
+    const progress = stageStore.projectProgress(projectId);
+    const memberIds = project.members.map(member => member.userId);
+    const changeType = state === 'completed' && !wasCompleted ? 'task_completed' : 'task_status';
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds,
+      change: { type: changeType, stageName, taskTitle, status: state }
+    });
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    emitNotificationSummary(req.user.id);
+    res.json({ task, stage: updatedStage, progress });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/projects/:projectId/checklist', (req, res) => {
+  const { projectId } = req.params;
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const checklist = checklistStore.list(projectId);
+  res.json({ checklist });
+});
+
+app.patch('/projects/:projectId/stages/:stageId/toggles/:toggleId', (req, res) => {
+  const { projectId, stageId, toggleId } = req.params;
+  const { value } = req.body ?? {};
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const member = project.members.find(item => item.userId === req.user.id);
+  if (!member || member.role === 'client') {
+    return res.status(403).json({ error: 'Only owners or staff can update the checklist' });
+  }
+  try {
+    const toggle = checklistStore.update({ projectId, stageId, toggleId, value });
+    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
+    res.json({ toggle, stage: updatedStage });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/projects/:projectId/stages/:stageId/toggles', (req, res) => {
+  const { projectId, stageId } = req.params;
+  const { label, defaultValue = false } = req.body ?? {};
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const member = project.members.find(item => item.userId === req.user.id);
+  if (!member || member.role === 'client') {
+    return res.status(403).json({ error: 'Only owners or staff can add checklist items' });
+  }
+  try {
+    const toggle = checklistStore.create({ projectId, stageId, label, defaultValue });
+    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
+    res.status(201).json({ toggle, stage: updatedStage });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/projects/:projectId/stages/:stageId/toggles/:toggleId', (req, res) => {
+  const { projectId, stageId, toggleId } = req.params;
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const member = project.members.find(item => item.userId === req.user.id);
+  if (!member || member.role === 'client') {
+    return res.status(403).json({ error: 'Only owners or staff can remove checklist items' });
+  }
+  try {
+    const toggle = checklistStore.remove({ projectId, stageId, toggleId });
+    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
+    res.json({ toggle, stage: updatedStage });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/projects/:projectId/invoices', (req, res) => {
+  const { projectId } = req.params;
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const invoices = invoiceStore.list(projectId);
+  res.json({ invoices });
+});
+
+app.patch('/projects/:projectId/invoices/:invoiceId', (req, res) => {
+  const { projectId, invoiceId } = req.params;
+  const { paymentConfirmed } = req.body ?? {};
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const member = project.members.find(item => item.userId === req.user.id);
+  if (!member || member.role === 'client') {
+    return res.status(403).json({ error: 'Only owners or staff can update invoices' });
+  }
+  try {
+    const invoice = invoiceStore.updateStatus({ projectId, invoiceId, paymentConfirmed });
     const memberIds = project.members.map(member => member.userId);
     notificationStore.bumpProjectChange({
       projectId,
@@ -485,14 +623,18 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', (req, res) => {
       actorId: req.user.id,
       actorName: req.user.displayName,
       memberIds,
-      change: { type: 'task_status', stageName, taskTitle, status: state }
+      change: {
+        type: 'invoice_status',
+        invoiceNumber: invoice.number,
+        paymentConfirmed: invoice.paymentConfirmed
+      }
     });
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
     }
     emitNotificationSummary(req.user.id);
-    res.json({ task });
+    res.json({ invoice });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -604,6 +746,21 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
     fileNames: entries.map(entry => entry.fileName)
   });
 
+  if (req.user.role === 'client') {
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds: members,
+      change: {
+        type: 'client_upload',
+        count: entries.length,
+        fileNames: entries.map(entry => entry.fileName)
+      }
+    });
+  }
+
   const recipients = members.filter(id => id !== req.user.id);
   if (recipients.length > 0) {
     emitNotificationSummaries(recipients);
@@ -611,6 +768,46 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
   emitNotificationSummary(req.user.id);
 
   res.json({ uploaded: entries });
+});
+
+app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
+  const { projectId, uploadId } = req.params;
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const bucket = ensureUploadBucket(projectId);
+  const record = bucket.find(item => item.id === uploadId);
+  if (!record) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  const absolutePath = path.resolve(uploadDir, record.storedName);
+  const uploadsRoot = path.resolve(uploadDir);
+  if (!absolutePath.startsWith(uploadsRoot)) {
+    return res.status(400).json({ error: 'Invalid file path' });
+  }
+
+  try {
+    await fs.promises.access(absolutePath, fs.constants.R_OK);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, Content-Length');
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+    res.download(absolutePath, record.fileName, err => {
+      if (err) {
+        console.error('Download error', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Unable to download file' });
+        } else {
+          res.end();
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Download error', error);
+    res.status(404).json({ error: 'File not found' });
+  }
 });
 
 const httpServer = http.createServer(app);
