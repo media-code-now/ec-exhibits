@@ -26,14 +26,17 @@ fs.mkdirSync(uploadDir, { recursive: true });
 
 let io;
 
+// Allow local dev and the deployed Netlify site by default. Use env vars to override.
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const PROD_ORIGIN = process.env.PROD_ORIGIN || 'https://ec-exhibits.netlify.app';
+const CLIENT_URL = process.env.CLIENT_URL || ALLOWED_ORIGIN;
 
 // Allow the configured origin and local dev origins (localhost on any port).
 function corsOriginHandler(origin, callback) {
   // No origin (curl/postman) -> allow
   if (!origin) return callback(null, true);
   if (origin === ALLOWED_ORIGIN) return callback(null, true);
+  if (origin === PROD_ORIGIN) return callback(null, true);
   if (/^https?:\/\/localhost(?::\d+)?$/.test(origin)) return callback(null, true);
   return callback(new Error('Not allowed by CORS'), false);
 }
@@ -49,6 +52,11 @@ function emitNotificationSummaries(userIds) {
 }
 
 app.use(cors({ origin: corsOriginHandler, credentials: true }));
+
+// Log effective origin configuration for debugging
+console.log('[INFO] Allowed origin (dev):', ALLOWED_ORIGIN);
+console.log('[INFO] Allowed origin (prod):', PROD_ORIGIN);
+console.log('[INFO] Client URL:', CLIENT_URL);
 
 // Use a small middleware that logs and parses the raw body for the /auth/token route
 // This helps diagnose malformed JSON from clients. Other routes use the standard express.json().
