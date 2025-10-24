@@ -77,27 +77,6 @@ export function ProgressStages({
       <div className="relative h-3 w-full rounded-full bg-slate-200">
         <span className="absolute inset-y-0 left-0 rounded-full bg-indigo-500" style={{ width: `${percent}%` }} />
       </div>
-      <ol className="flex flex-wrap items-center gap-3">
-        {stages.map(stage => (
-          <li
-            key={stage.id}
-            className={clsx(
-              'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium',
-              stage.status === 'completed'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : stage.status === 'in_progress'
-                  ? 'border-amber-200 bg-amber-50 text-amber-700'
-                  : 'border-slate-200 bg-white text-slate-500'
-            )}
-          >
-            <span className="h-2.5 w-2.5 rounded-full bg-current" />
-            {stage.name}
-            {typeof stage.progressPercent === 'number' && stage.progressPercent > 0 && (
-              <span className="text-xs text-indigo-600">{stage.progressPercent}%</span>
-            )}
-          </li>
-        ))}
-      </ol>
       <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
         {stages.map(stage => (
           <details key={stage.id} className="group">

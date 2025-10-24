@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import clsx from 'clsx';
 import { getSocket } from '../hooks/socketSingleton.js';
@@ -22,6 +22,8 @@ export function NotificationBell({ token, projects = [] }) {
   const [summary, setSummary] = useState(emptySummary);
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
+  const panelRef = useRef(null);
+  const [panelOffset, setPanelOffset] = useState(0);
 
   const projectLookup = useMemo(
     () => Object.fromEntries(projects.map(project => [project.id, project.name])),
@@ -158,6 +160,38 @@ export function NotificationBell({ token, projects = [] }) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      setPanelOffset(0);
+    }
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const updateOffset = () => {
+      if (!panelRef.current) return;
+      const rect = panelRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+      const gutter = 16;
+      let offset = 0;
+      if (rect.left < gutter) {
+        offset = gutter - rect.left;
+      } else if (rect.right > viewportWidth - gutter) {
+        offset = viewportWidth - gutter - rect.right;
+      }
+      setPanelOffset(previous => (Math.abs(previous - offset) > 0.5 ? offset : previous));
+    };
+
+    updateOffset();
+    window.addEventListener('resize', updateOffset);
+    window.addEventListener('orientationchange', updateOffset);
+
+    return () => {
+      window.removeEventListener('resize', updateOffset);
+      window.removeEventListener('orientationchange', updateOffset);
+    };
+  }, [open, summary]);
+
   return (
     <div className="relative" ref={containerRef}>
       <button
@@ -176,7 +210,11 @@ export function NotificationBell({ token, projects = [] }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-40 mt-3 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+        <div
+          ref={panelRef}
+          className="absolute right-0 z-40 mt-3 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl"
+          style={panelOffset !== 0 ? { transform: `translateX(${panelOffset}px)` } : undefined}
+        >
           <header className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
             {total > 0 && (
