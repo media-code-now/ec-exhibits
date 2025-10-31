@@ -51,37 +51,45 @@ export function FilesCard({ projectId }) {
     <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">
       <header className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Files</h3>
-          <p className="text-sm text-slate-500">Shared documents for this project</p>
+          <h3 className="text-base font-semibold text-slate-900">Display Active Rendering</h3>
+          <p className="text-sm text-slate-500">Display Active Rendering</p>
         </div>
       </header>
       <div className="space-y-3">
-        {uploads.map(file => (
-          <article key={file.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-800">{file.fileName}</p>
-              <p className="text-xs text-slate-500">Uploaded {new Date(file.uploadedAt).toLocaleString()}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span
-                className={clsx(
-                  'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold',
-                  file.requiresReview ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                )}
-              >
-                {file.requiresReview ? 'Needs Review' : 'Ready'}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleDownload(file)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
-              >
-                Download
-              </button>
-            </div>
-          </article>
-        ))}
-        {uploads.length === 0 && <p className="text-sm text-slate-500">No documents uploaded yet.</p>}
+        {(() => {
+          // Filter to only show the most recent "active rendering" file
+          const activeRenderingFiles = uploads.filter(file => 
+            file.label === 'active-rendering' || file.category === 'active-rendering'
+          );
+          const latestFile = activeRenderingFiles.sort((a, b) => 
+            new Date(b.uploadedAt) - new Date(a.uploadedAt)
+          )[0];
+          
+          if (latestFile) {
+            return (
+              <article key={latestFile.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{latestFile.fileName}</p>
+                  <p className="text-xs text-slate-500">Updated {new Date(latestFile.uploadedAt).toLocaleString()}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold bg-blue-100 text-blue-700">
+                    Active Rendering
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(latestFile)}
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                  >
+                    Download
+                  </button>
+                </div>
+              </article>
+            );
+          } else {
+            return <p className="text-sm text-slate-500">No active rendering uploaded yet.</p>;
+          }
+        })()}
       </div>
     </section>
   );

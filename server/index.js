@@ -222,6 +222,442 @@ app.put('/template/stages', (req, res) => {
   }
 });
 
+// Saved templates endpoints
+app.get('/template/saved', (req, res) => {
+  // Get the current default template to use for Standard Project Template
+  const currentTemplate = stageStore.getTemplateDefinition();
+  
+  const savedTemplates = [
+    {
+      id: 1,
+      name: "Standard Project Template",
+      description: "Default template for standard projects",
+      createdAt: "2024-10-25T10:00:00Z",
+      stagesCount: currentTemplate.length,
+      stages: currentTemplate // Use the current default template
+    },
+    {
+      id: 2,
+      name: "Quick Setup Template",
+      description: "Simplified template for fast projects - Invoices, Graphics, Furniture",
+      createdAt: "2024-10-20T15:30:00Z",
+      stagesCount: 3,
+      stages: [
+        {
+          slug: 'invoices-payments',
+          name: 'Invoices & Payments',
+          description: 'Handle project invoicing and payment processing',
+          defaultStageDueInDays: 7,
+          permissions: {
+            viewRoles: ['owner', 'staff', 'client'],
+            taskUpdateRoles: ['owner', 'staff'],
+            checklistEditRoles: ['owner', 'staff'],
+            clientCanUpload: false
+          },
+          tasks: [
+            {
+              slug: 'create-invoice',
+              title: 'Create Project Invoice',
+              ownerRole: 'staff',
+              defaultDueInDays: 3,
+              requiresClientInput: false,
+              requiredUploadIds: []
+            },
+            {
+              slug: 'process-payment',
+              title: 'Process Payment',
+              ownerRole: 'staff',
+              defaultDueInDays: 7,
+              requiresClientInput: true,
+              requiredUploadIds: []
+            }
+          ],
+          uploads: [
+            {
+              uploadId: 'invoice-docs',
+              label: 'Invoice Documents',
+              acceptedTypes: ['pdf', 'docx'],
+              acceptedTypesText: 'pdf, docx',
+              maxFiles: 3,
+              required: true
+            }
+          ],
+          toggles: [
+            {
+              slug: 'payment-received',
+              label: 'Payment Received',
+              defaultValue: false
+            }
+          ]
+        },
+        {
+          slug: 'graphics-branding',
+          name: 'Graphics & Branding',
+          description: 'Design and branding materials creation',
+          defaultStageDueInDays: 14,
+          permissions: {
+            viewRoles: ['owner', 'staff', 'client'],
+            taskUpdateRoles: ['owner', 'staff'],
+            checklistEditRoles: ['owner', 'staff'],
+            clientCanUpload: true
+          },
+          tasks: [
+            {
+              slug: 'create-brand-guide',
+              title: 'Create Brand Guidelines',
+              ownerRole: 'staff',
+              defaultDueInDays: 7,
+              requiresClientInput: false,
+              requiredUploadIds: []
+            },
+            {
+              slug: 'design-graphics',
+              title: 'Design Graphics Assets',
+              ownerRole: 'staff',
+              defaultDueInDays: 10,
+              requiresClientInput: true,
+              requiredUploadIds: ['brand-assets']
+            }
+          ],
+          uploads: [
+            {
+              uploadId: 'brand-assets',
+              label: 'Brand Assets',
+              acceptedTypes: ['png', 'jpg', 'svg', 'ai', 'psd'],
+              acceptedTypesText: 'png, jpg, svg, ai, psd',
+              maxFiles: 10,
+              required: true
+            },
+            {
+              uploadId: 'final-graphics',
+              label: 'Final Graphics',
+              acceptedTypes: ['png', 'jpg', 'svg', 'pdf'],
+              acceptedTypesText: 'png, jpg, svg, pdf',
+              maxFiles: 20,
+              required: false
+            }
+          ],
+          toggles: [
+            {
+              slug: 'brand-approved',
+              label: 'Brand Guidelines Approved',
+              defaultValue: false
+            },
+            {
+              slug: 'graphics-approved',
+              label: 'Graphics Approved by Client',
+              defaultValue: false
+            }
+          ]
+        },
+        {
+          slug: 'furniture-equipment',
+          name: 'Furniture & Equipment',
+          description: 'Furniture selection and equipment procurement',
+          defaultStageDueInDays: 21,
+          permissions: {
+            viewRoles: ['owner', 'staff', 'client'],
+            taskUpdateRoles: ['owner', 'staff'],
+            checklistEditRoles: ['owner', 'staff'],
+            clientCanUpload: true
+          },
+          tasks: [
+            {
+              slug: 'furniture-selection',
+              title: 'Select Furniture Items',
+              ownerRole: 'staff',
+              defaultDueInDays: 10,
+              requiresClientInput: true,
+              requiredUploadIds: []
+            },
+            {
+              slug: 'equipment-procurement',
+              title: 'Procure Equipment',
+              ownerRole: 'staff',
+              defaultDueInDays: 14,
+              requiresClientInput: false,
+              requiredUploadIds: ['equipment-specs']
+            },
+            {
+              slug: 'delivery-coordination',
+              title: 'Coordinate Delivery',
+              ownerRole: 'staff',
+              defaultDueInDays: 21,
+              requiresClientInput: true,
+              requiredUploadIds: []
+            }
+          ],
+          uploads: [
+            {
+              uploadId: 'furniture-specs',
+              label: 'Furniture Specifications',
+              acceptedTypes: ['pdf', 'docx', 'xlsx'],
+              acceptedTypesText: 'pdf, docx, xlsx',
+              maxFiles: 5,
+              required: true
+            },
+            {
+              uploadId: 'equipment-specs',
+              label: 'Equipment Specifications',
+              acceptedTypes: ['pdf', 'docx', 'xlsx'],
+              acceptedTypesText: 'pdf, docx, xlsx',
+              maxFiles: 5,
+              required: true
+            }
+          ],
+          toggles: [
+            {
+              slug: 'furniture-ordered',
+              label: 'Furniture Ordered',
+              defaultValue: false
+            },
+            {
+              slug: 'equipment-ordered',
+              label: 'Equipment Ordered',
+              defaultValue: false
+            },
+            {
+              slug: 'delivery-scheduled',
+              label: 'Delivery Scheduled',
+              defaultValue: false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      id: 3,
+      name: "Complex Project Template",
+      description: "Comprehensive template for large projects",
+      createdAt: "2024-10-15T09:15:00Z",
+      stagesCount: 8,
+      stages: currentTemplate // Also use current template as base for complex projects
+    }
+  ];
+  
+  res.json({ templates: savedTemplates });
+});
+
+app.get('/template/saved/:id', (req, res) => {
+  const { id } = req.params;
+  const currentTemplate = stageStore.getTemplateDefinition();
+  
+  const savedTemplates = {
+    1: {
+      id: 1,
+      name: "Standard Project Template",
+      description: "Default template for standard projects",
+      createdAt: "2024-10-25T10:00:00Z",
+      stagesCount: currentTemplate.length,
+      stages: currentTemplate // Use the current default template
+    },
+    2: {
+      id: 2,
+      name: "Quick Setup Template",
+      description: "Simplified template for fast projects - Invoices, Graphics, Furniture",
+      createdAt: "2024-10-20T15:30:00Z",
+      stagesCount: 3,
+      stages: [
+        {
+          slug: 'invoices-payments',
+          name: 'Invoices & Payments',
+          description: 'Handle project invoicing and payment processing',
+          defaultStageDueInDays: 7,
+          permissions: {
+            viewRoles: ['owner', 'staff', 'client'],
+            taskUpdateRoles: ['owner', 'staff'],
+            checklistEditRoles: ['owner', 'staff'],
+            clientCanUpload: false
+          },
+          tasks: [
+            {
+              slug: 'create-invoice',
+              title: 'Create Project Invoice',
+              ownerRole: 'staff',
+              defaultDueInDays: 3,
+              requiresClientInput: false,
+              requiredUploadIds: []
+            },
+            {
+              slug: 'process-payment',
+              title: 'Process Payment',
+              ownerRole: 'staff',
+              defaultDueInDays: 7,
+              requiresClientInput: true,
+              requiredUploadIds: []
+            }
+          ],
+          uploads: [
+            {
+              uploadId: 'invoice-docs',
+              label: 'Invoice Documents',
+              acceptedTypes: ['pdf', 'docx'],
+              acceptedTypesText: 'pdf, docx',
+              maxFiles: 3,
+              required: true
+            }
+          ],
+          toggles: [
+            {
+              slug: 'payment-received',
+              label: 'Payment Received',
+              defaultValue: false
+            }
+          ]
+        },
+        {
+          slug: 'graphics-branding',
+          name: 'Graphics & Branding',
+          description: 'Design and branding materials creation',
+          defaultStageDueInDays: 14,
+          permissions: {
+            viewRoles: ['owner', 'staff', 'client'],
+            taskUpdateRoles: ['owner', 'staff'],
+            checklistEditRoles: ['owner', 'staff'],
+            clientCanUpload: true
+          },
+          tasks: [
+            {
+              slug: 'create-brand-guide',
+              title: 'Create Brand Guidelines',
+              ownerRole: 'staff',
+              defaultDueInDays: 7,
+              requiresClientInput: false,
+              requiredUploadIds: []
+            },
+            {
+              slug: 'design-graphics',
+              title: 'Design Graphics Assets',
+              ownerRole: 'staff',
+              defaultDueInDays: 10,
+              requiresClientInput: true,
+              requiredUploadIds: ['brand-assets']
+            }
+          ],
+          uploads: [
+            {
+              uploadId: 'brand-assets',
+              label: 'Brand Assets',
+              acceptedTypes: ['png', 'jpg', 'svg', 'ai', 'psd'],
+              acceptedTypesText: 'png, jpg, svg, ai, psd',
+              maxFiles: 10,
+              required: true
+            },
+            {
+              uploadId: 'final-graphics',
+              label: 'Final Graphics',
+              acceptedTypes: ['png', 'jpg', 'svg', 'pdf'],
+              acceptedTypesText: 'png, jpg, svg, pdf',
+              maxFiles: 20,
+              required: false
+            }
+          ],
+          toggles: [
+            {
+              slug: 'brand-approved',
+              label: 'Brand Guidelines Approved',
+              defaultValue: false
+            },
+            {
+              slug: 'graphics-approved',
+              label: 'Graphics Approved by Client',
+              defaultValue: false
+            }
+          ]
+        },
+        {
+          slug: 'furniture-equipment',
+          name: 'Furniture & Equipment',
+          description: 'Furniture selection and equipment procurement',
+          defaultStageDueInDays: 21,
+          permissions: {
+            viewRoles: ['owner', 'staff', 'client'],
+            taskUpdateRoles: ['owner', 'staff'],
+            checklistEditRoles: ['owner', 'staff'],
+            clientCanUpload: true
+          },
+          tasks: [
+            {
+              slug: 'furniture-selection',
+              title: 'Select Furniture Items',
+              ownerRole: 'staff',
+              defaultDueInDays: 10,
+              requiresClientInput: true,
+              requiredUploadIds: []
+            },
+            {
+              slug: 'equipment-procurement',
+              title: 'Procure Equipment',
+              ownerRole: 'staff',
+              defaultDueInDays: 14,
+              requiresClientInput: false,
+              requiredUploadIds: ['equipment-specs']
+            },
+            {
+              slug: 'delivery-coordination',
+              title: 'Coordinate Delivery',
+              ownerRole: 'staff',
+              defaultDueInDays: 21,
+              requiresClientInput: true,
+              requiredUploadIds: []
+            }
+          ],
+          uploads: [
+            {
+              uploadId: 'furniture-specs',
+              label: 'Furniture Specifications',
+              acceptedTypes: ['pdf', 'docx', 'xlsx'],
+              acceptedTypesText: 'pdf, docx, xlsx',
+              maxFiles: 5,
+              required: true
+            },
+            {
+              uploadId: 'equipment-specs',
+              label: 'Equipment Specifications',
+              acceptedTypes: ['pdf', 'docx', 'xlsx'],
+              acceptedTypesText: 'pdf, docx, xlsx',
+              maxFiles: 5,
+              required: true
+            }
+          ],
+          toggles: [
+            {
+              slug: 'furniture-ordered',
+              label: 'Furniture Ordered',
+              defaultValue: false
+            },
+            {
+              slug: 'equipment-ordered',
+              label: 'Equipment Ordered',
+              defaultValue: false
+            },
+            {
+              slug: 'delivery-scheduled',
+              label: 'Delivery Scheduled',
+              defaultValue: false
+            }
+          ]
+        }
+      ]
+    },
+    3: {
+      id: 3,
+      name: "Complex Project Template",
+      description: "Comprehensive template for large projects",
+      createdAt: "2024-10-15T09:15:00Z",
+      stagesCount: 8,
+      stages: currentTemplate // Use current template as base
+    }
+  };
+  
+  const template = savedTemplates[parseInt(id)];
+  if (!template) {
+    return res.status(404).json({ error: 'Template not found' });
+  }
+  
+  res.json({ template });
+});
+
 app.post('/projects', (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can create projects' });

@@ -12,6 +12,7 @@ import FilesTab from './FilesTab.jsx';
 import logoMark from '../assets/exhibit-control-logo.svg';
 import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
 import { ChecklistPanel } from './ChecklistPanel.jsx';
+import { SavedTemplates } from './SavedTemplates.jsx';
 
 const generateRandomPassword = (length = 14) => {
   const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%&*?';
@@ -306,7 +307,7 @@ export function Dashboard({
     if (isOwner) {
       items.push({ key: 'projects', label: 'Projects' });
     }
-    items.push({ key: 'files', label: 'Files' });
+    items.push({ key: 'files', label: 'Project Files' });
     if (isOwner || isStaff) {
       items.push({ key: 'checklist', label: 'Checklist' });
     }
@@ -567,11 +568,13 @@ export function Dashboard({
                   isUpdating={updateInvoiceStatusMutation.isPending}
                 />
                 <FilesCard projectId={project.id} />
-                <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-                  <h3 className="text-base font-semibold text-slate-900">Upload Invoice or Project Files</h3>
-                  <p className="mb-4 text-sm text-slate-500">Attach deliverables with Yes/No review flags.</p>
-                  <FileDropzone projectId={project.id} />
-                </div>
+                {isOwner && (
+                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+                    <h3 className="text-base font-semibold text-slate-900">Upload Display Active Rendering</h3>
+                    <p className="mb-4 text-sm text-slate-500">Attach deliverables with Yes/No review flags.</p>
+                    <FileDropzone projectId={project.id} />
+                  </div>
+                )}
               </div>
             </section>
           )}
@@ -587,7 +590,12 @@ export function Dashboard({
           )}
 
           {effectiveSection === 'template' && isOwner && (
-            <TemplateAdminPanel canEdit={isOwner} />
+            <div className="space-y-6">
+              <SavedTemplates onLoadTemplate={(template) => {
+                console.log('Template loaded:', template.name);
+              }} />
+              <TemplateAdminPanel canEdit={isOwner} />
+            </div>
           )}
 
           {effectiveSection === 'projects' && isOwner && (

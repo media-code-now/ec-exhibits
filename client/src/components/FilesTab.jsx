@@ -70,7 +70,7 @@ function FilePreview({ file, onDownload }) {
 }
 
 function FilesCard({ category, files, onUpload, onUpdate, onDelete, onDownload, user }) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -416,8 +416,25 @@ export default function FilesTab({ projectId, user }) {
     }
   };
 
-  const handleDownload = (file) => {
-    window.open(`/projects/${projectId}/files/${file.id}/download`, '_blank');
+  const handleDownload = async (file) => {
+    try {
+      const response = await axios.get(`/projects/${projectId}/files/${file.id}/download`, {
+        responseType: 'blob'
+      });
+      
+      // Create blob link to download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', file.originalName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Failed to download file. Please try again.');
+    }
   };
 
   if (loading) {

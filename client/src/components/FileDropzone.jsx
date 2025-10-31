@@ -33,8 +33,8 @@ export function FileDropzone({ projectId }) {
       formData.append(
         'meta',
         JSON.stringify(
-          items.map(({ label, remarks, requiresReview }) => ({
-            label,
+          items.map(({ remarks, requiresReview }) => ({
+            label: 'active-rendering', // Mark all uploads as active rendering
             remarks,
             requiresReview
           }))
@@ -53,7 +53,7 @@ export function FileDropzone({ projectId }) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    multiple: true,
+    multiple: false, // Only allow one file since we're replacing
     maxSize: 50 * 1024 * 1024
   });
 
@@ -67,8 +67,8 @@ export function FileDropzone({ projectId }) {
         )}
       >
         <input {...getInputProps()} />
-        <p className="text-sm text-slate-500">Drag & drop files here, or click to browse</p>
-        <p className="text-xs text-slate-400 mt-2">PDF, DOCX, PNG up to 50MB each</p>
+        <p className="text-sm text-slate-500">Drag & drop active rendering file here, or click to browse</p>
+        <p className="text-xs text-slate-400 mt-2">This will replace the current active rendering display</p>
       </section>
 
       {items.length > 0 && (
