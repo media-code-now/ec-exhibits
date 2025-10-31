@@ -8,6 +8,7 @@ import { ProjectChat } from './ProjectChat.jsx';
 import { InvoicesCard } from './InvoicesCard.jsx';
 import { FilesCard } from './FilesCard.jsx';
 import { FileDropzone } from './FileDropzone.jsx';
+import FilesTab from './FilesTab.jsx';
 import logoMark from '../assets/exhibit-control-logo.svg';
 import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
 import { ChecklistPanel } from './ChecklistPanel.jsx';
@@ -576,13 +577,8 @@ export function Dashboard({
           )}
 
           {effectiveSection === 'files' && (
-            <section className="space-y-8">
-              <FilesCard projectId={project.id} />
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-                <h3 className="text-base font-semibold text-slate-900">Upload Files</h3>
-                <p className="mb-4 text-sm text-slate-500">Drag and drop documents to share with the team.</p>
-                <FileDropzone projectId={project.id} />
-              </div>
+            <section>
+              <FilesTab projectId={project.id} user={user} />
             </section>
           )}
 

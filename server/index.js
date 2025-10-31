@@ -16,6 +16,7 @@ import { invoiceStore } from './stores/invoiceStore.js';
 import { inviteStore } from './stores/inviteStore.js';
 import { messageStore } from './stores/messageStore.js';
 import { notificationStore } from './stores/notificationStore.js';
+import { fileStore, FILE_CATEGORIES, CATEGORY_LABELS } from './stores/fileStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -776,6 +777,222 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
   emitNotificationSummary(req.user.id);
 
   res.json({ uploaded: entries });
+});
+
+// Files tab management endpoints
+app.get('/projects/:projectId/files', (req, res) => {
+  const { projectId } = req.params;
+  const { category } = req.query;
+  
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  try {
+    if (category && category !== 'all') {
+      const files = fileStore.getProjectFiles(projectId, category);
+      res.json({ files, category });
+    } else {
+      const filesByCategory = fileStore.getProjectFilesByCategory(projectId);
+      res.json({ 
+        filesByCategory, 
+        categories: CATEGORY_LABELS,
+        stats: fileStore.getProjectFileStats(projectId)
+      });
+    }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/projects/:projectId/files/:category', upload.array('files'), (req, res) => {
+  const { projectId, category } = req.params;
+  
+  if (!Object.values(FILE_CATEGORIES).includes(category)) {
+    return res.status(400).json({ error: `Invalid category: ${category}` });
+  }
+
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  try {
+    const meta = JSON.parse(req.body.meta ?? '[]');
+    const uploadedFiles = req.files.map((file, index) => {
+      return fileStore.uploadFile({
+        projectId,
+        category,
+        filename: file.filename,
+        originalName: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        uploadedBy: req.user.id,
+        label: meta[index]?.label ?? '',
+        remarks: meta[index]?.remarks ?? ''
+      });
+    });
+
+    // Send notifications
+    notificationStore.bumpUploads({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds: members,
+      count: uploadedFiles.length,
+      fileNames: uploadedFiles.map(f => f.originalName)
+    });
+
+    if (req.user.role === 'client') {
+      notificationStore.bumpProjectChange({
+        projectId,
+        projectName: project.name,
+        actorId: req.user.id,
+        actorName: req.user.displayName,
+        memberIds: members,
+        change: {
+          type: 'client_upload',
+          category: CATEGORY_LABELS[category],
+          count: uploadedFiles.length,
+          fileNames: uploadedFiles.map(f => f.originalName)
+        }
+      });
+    }
+
+    const recipients = members.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    emitNotificationSummary(req.user.id);
+
+    res.json({ uploaded: uploadedFiles });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.patch('/projects/:projectId/files/:fileId', (req, res) => {
+  const { projectId, fileId } = req.params;
+  const { label, remarks, addressed } = req.body ?? {};
+
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  try {
+    const file = fileStore.getFile(fileId);
+    if (!file || file.projectId !== projectId) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const updates = {};
+    if (label !== undefined) updates.label = label;
+    if (remarks !== undefined) updates.remarks = remarks;
+    if (addressed !== undefined) updates.addressed = Boolean(addressed);
+
+    const updatedFile = fileStore.updateFile(fileId, updates);
+
+    // Notify about addressed status change
+    if (addressed !== undefined && addressed !== file.addressed) {
+      notificationStore.bumpProjectChange({
+        projectId,
+        projectName: project.name,
+        actorId: req.user.id,
+        actorName: req.user.displayName,
+        memberIds: members,
+        change: {
+          type: 'file_addressed',
+          fileName: file.originalName,
+          addressed: Boolean(addressed)
+        }
+      });
+
+      const recipients = members.filter(id => id !== req.user.id);
+      if (recipients.length > 0) {
+        emitNotificationSummaries(recipients);
+      }
+      emitNotificationSummary(req.user.id);
+    }
+
+    res.json({ file: updatedFile });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/projects/:projectId/files/:fileId', (req, res) => {
+  const { projectId, fileId } = req.params;
+
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const member = project.members.find(item => item.userId === req.user.id);
+  if (!member || member.role === 'client') {
+    return res.status(403).json({ error: 'Only owners or staff can delete files' });
+  }
+
+  try {
+    const file = fileStore.getFile(fileId);
+    if (!file || file.projectId !== projectId) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const deletedFile = fileStore.deleteFile(fileId);
+
+    // Delete actual file from disk
+    const filePath = path.join(uploadDir, file.filename);
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.warn(`Could not delete file from disk: ${filePath}`, err);
+    }
+
+    res.json({ deleted: deletedFile });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/projects/:projectId/files/:fileId/download', (req, res) => {
+  const { projectId, fileId } = req.params;
+
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const members = project.members.map(member => member.userId);
+  if (!members.includes(req.user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  try {
+    const file = fileStore.getFile(fileId);
+    if (!file || file.projectId !== projectId) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const filePath = path.join(uploadDir, file.filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+    res.setHeader('Content-Type', file.mimetype);
+    res.sendFile(path.resolve(filePath));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
