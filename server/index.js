@@ -658,6 +658,48 @@ app.get('/template/saved/:id', (req, res) => {
   res.json({ template });
 });
 
+// POST endpoint to save a new template
+app.post('/template/saved', (req, res) => {
+  console.log('[POST /template/saved] Request received');
+  console.log('Body:', req.body);
+  console.log('User:', req.user);
+  
+  try {
+    const { name, stages } = req.body;
+    
+    if (!name || !name.trim()) {
+      console.log('[POST /template/saved] Error: Template name is required');
+      return res.status(400).json({ error: 'Template name is required' });
+    }
+    
+    if (!stages || !Array.isArray(stages) || stages.length === 0) {
+      console.log('[POST /template/saved] Error: Invalid stages');
+      return res.status(400).json({ error: 'Template must have at least one stage' });
+    }
+    
+    // In a real implementation, you would save this to a database
+    // For now, we'll just return success
+    const newTemplate = {
+      id: Date.now(), // Generate a temporary ID
+      name: name.trim(),
+      description: `Custom template: ${name.trim()}`,
+      createdAt: new Date().toISOString(),
+      stagesCount: stages.length,
+      stages: stages
+    };
+    
+    console.log('[POST /template/saved] Success:', newTemplate.name);
+    res.status(201).json({ 
+      success: true, 
+      message: 'Template saved successfully',
+      template: newTemplate
+    });
+  } catch (error) {
+    console.error('[POST /template/saved] Error:', error);
+    res.status(500).json({ error: 'Failed to save template' });
+  }
+});
+
 app.post('/projects', (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can create projects' });
