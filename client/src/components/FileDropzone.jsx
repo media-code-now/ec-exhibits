@@ -12,11 +12,31 @@ const defaultMeta = file => ({
   requiresReview: false
 });
 
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+};
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 export function FileDropzone({ projectId }) {
   const [items, setItems] = useState([]);
+  const [uploadError, setUploadError] = useState(null);
   const queryClient = useQueryClient();
 
   const onDrop = useCallback(acceptedFiles => {
+    setUploadError(null);
+    
+    // Validate file sizes
+    const oversizedFiles = acceptedFiles.filter(file => file.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      setUploadError(`File "${oversizedFiles[0].name}" is too large. Maximum size is 10MB.`);
+      return;
+    }
+    
     setItems(prev => [...prev, ...acceptedFiles.map(defaultMeta)]);
   }, []);
 
@@ -47,14 +67,26 @@ export function FileDropzone({ projectId }) {
     },
     onSuccess: () => {
       setItems([]);
+      setUploadError(null);
       queryClient.invalidateQueries(['uploads', projectId]);
+    },
+    onError: (error) => {
+      const errorMsg = error.response?.data?.error || 'Upload failed. Please try again.';
+      setUploadError(errorMsg);
     }
   });
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: false, // Only allow one file since we're replacing
-    maxSize: 50 * 1024 * 1024
+    maxSize: MAX_FILE_SIZE,
+    onDropRejected: (rejectedFiles) => {
+      if (rejectedFiles[0]?.errors[0]?.code === 'file-too-large') {
+        setUploadError(`File is too large. Maximum size is ${formatFileSize(MAX_FILE_SIZE)}.`);
+      } else {
+        setUploadError('File rejected. Please check the file type and size.');
+      }
+    }
   });
 
   return (
@@ -69,7 +101,20 @@ export function FileDropzone({ projectId }) {
         <input {...getInputProps()} />
         <p className="text-sm text-slate-500">Drag & drop active rendering file here, or click to browse</p>
         <p className="text-xs text-slate-400 mt-2">This will replace the current active rendering display</p>
+        <p className="text-xs text-slate-400 mt-1">Maximum file size: 10MB</p>
       </section>
+
+      {uploadError && (
+        <div className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">
+          {uploadError}
+        </div>
+      )}
+
+      {uploadMutation.error && (
+        <div className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">
+          {uploadMutation.error.response?.data?.error || 'Upload failed'}
+        </div>
+      )}
 
       {items.length > 0 && (
         <div className="space-y-3">
@@ -78,7 +123,7 @@ export function FileDropzone({ projectId }) {
               <header className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="font-medium text-slate-900">{item.file.name}</p>
-                  <p className="text-xs text-slate-500">{(item.file.size / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs text-slate-500">{formatFileSize(item.file.size)}</p>
                 </div>
                 <button
                   type="button"

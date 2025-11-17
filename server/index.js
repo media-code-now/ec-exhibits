@@ -1219,11 +1219,60 @@ function ensureUploadBucket(projectId) {
   return uploadsByProject.get(projectId);
 }
 
+// File upload configuration with limits
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadDir),
-  filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+  filename: (_, file, cb) => {
+    // Sanitize filename to prevent path traversal
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${Date.now()}-${sanitizedName}`);
+  }
 });
-const upload = multer({ storage });
+
+// Allowed file types
+const allowedMimeTypes = [
+  // Documents
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  // Images
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  // Archives
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-rar-compressed',
+  // Design files
+  'application/postscript', // .ai files
+  'image/vnd.adobe.photoshop', // .psd files
+];
+
+const fileFilter = (req, file, cb) => {
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type not allowed: ${file.mimetype}. Allowed types: PDF, Word, Excel, PowerPoint, images, ZIP, AI, PSD`), false);
+  }
+};
+
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max file size
+    files: 10 // Maximum 10 files per request
+  },
+  fileFilter
+});
 
 app.get('/projects/:projectId/uploads', (req, res) => {
   const { projectId } = req.params;
@@ -1244,6 +1293,10 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
   const members = project.members.map(member => member.userId);
   if (!members.includes(req.user.id)) {
     return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'No files uploaded' });
   }
 
   const meta = JSON.parse(req.body.meta ?? '[]');
@@ -1555,6 +1608,41 @@ app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
     console.error('Download error', error);
     res.status(404).json({ error: 'File not found' });
   }
+});
+
+// Global error handler for multer and other errors
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        error: 'File too large. Maximum file size is 10MB.' 
+      });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ 
+        error: 'Too many files. Maximum 10 files per upload.' 
+      });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ 
+        error: 'Unexpected field in upload.' 
+      });
+    }
+    return res.status(400).json({ 
+      error: `Upload error: ${err.message}` 
+    });
+  }
+  
+  if (err.message && err.message.includes('File type not allowed')) {
+    return res.status(400).json({ 
+      error: err.message 
+    });
+  }
+  
+  console.error('Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'An error occurred processing your request.' 
+  });
 });
 
 const httpServer = http.createServer(app);
