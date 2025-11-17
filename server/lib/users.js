@@ -1,10 +1,14 @@
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
+import { saveDataAsync, loadData } from './dataStore.js';
+
+const USERS_FILE = 'users.json';
 
 // Default password for all demo users: "password123"
 const defaultPasswordHash = bcrypt.hashSync('password123', 10);
 
-const userStore = [
+// Initial seed data
+const initialUsers = [
   { 
     id: 'user-owner', 
     displayName: 'Olivia Owner', 
@@ -41,6 +45,22 @@ const userStore = [
     passwordHash: defaultPasswordHash
   }
 ];
+
+// Load users from disk or use seed data
+let userStore = [];
+const loadedData = loadData(USERS_FILE);
+if (loadedData && Array.isArray(loadedData)) {
+  userStore = loadedData;
+  console.log(`[INFO] Loaded ${userStore.length} users from disk`);
+} else {
+  userStore = [...initialUsers];
+  console.log('[INFO] Using seed user data');
+}
+
+// Helper to persist data to disk
+function persistUsers() {
+  saveDataAsync(USERS_FILE, userStore);
+}
 
 const allowedRoles = new Set(['owner', 'staff', 'client']);
 
@@ -89,6 +109,7 @@ export function addUser({ displayName, role, email, password }) {
     passwordHash
   };
   userStore.push(user);
+  persistUsers(); // Save to disk
   
   const { passwordHash: _, ...safeUser } = user;
   return safeUser;
@@ -100,5 +121,6 @@ export function removeUser(userId) {
     throw new Error('User not found');
   }
   const [removed] = userStore.splice(index, 1);
+  persistUsers(); // Save to disk
   return { ...removed };
 }

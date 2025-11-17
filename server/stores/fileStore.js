@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { saveDataAsync, loadData, mapToObject, objectToMap } from '../lib/dataStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const FILES_FILE = 'files.json';
 
 // File categories for the Files tab
 export const FILE_CATEGORIES = {
@@ -27,6 +30,39 @@ class FileStore {
     this.files = new Map(); // fileId -> file metadata
     this.projectFiles = new Map(); // projectId -> Set of fileIds
     this.nextFileId = 1;
+    
+    // Load from disk
+    this.loadFromDisk();
+  }
+  
+  loadFromDisk() {
+    const loadedData = loadData(FILES_FILE);
+    if (loadedData) {
+      this.files = objectToMap(loadedData.files);
+      // Convert projectFiles Sets back from arrays
+      this.projectFiles = new Map();
+      for (const [projectId, fileIds] of Object.entries(loadedData.projectFiles || {})) {
+        this.projectFiles.set(projectId, new Set(fileIds));
+      }
+      this.nextFileId = loadedData.nextFileId || 1;
+      console.log(`[INFO] Loaded ${this.files.size} file records from disk`);
+    } else {
+      console.log('[INFO] No file metadata found, starting fresh');
+    }
+  }
+  
+  persistToDisk() {
+    // Convert Sets to arrays for JSON serialization
+    const projectFilesObj = {};
+    for (const [projectId, fileIds] of this.projectFiles.entries()) {
+      projectFilesObj[projectId] = Array.from(fileIds);
+    }
+    
+    saveDataAsync(FILES_FILE, {
+      files: mapToObject(this.files),
+      projectFiles: projectFilesObj,
+      nextFileId: this.nextFileId
+    });
   }
 
   /**
@@ -62,6 +98,8 @@ class FileStore {
       this.projectFiles.set(projectId, new Set());
     }
     this.projectFiles.get(projectId).add(fileId);
+    
+    this.persistToDisk(); // Save to disk
 
     return fileData;
   }
@@ -128,6 +166,8 @@ class FileStore {
 
     const updatedFile = { ...file, ...validUpdates };
     this.files.set(fileId, updatedFile);
+    
+    this.persistToDisk(); // Save to disk
 
     return updatedFile;
   }
@@ -149,6 +189,8 @@ class FileStore {
 
     // Remove file record
     this.files.delete(fileId);
+    
+    this.persistToDisk(); // Save to disk
 
     return file;
   }

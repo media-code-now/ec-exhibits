@@ -691,7 +691,32 @@ const cloneTemplateStageDefinition = stage => ({
 
 const buildTemplateFromStages = stages => stages.map(cloneTemplateStageDefinition);
 
-let templateStages = buildTemplateFromStages(defaultTemplateStages);
+// Import data persistence utilities
+import { saveDataAsync, loadData, mapToObject, objectToMap } from '../lib/dataStore.js';
+
+const STAGES_FILE = 'stages.json';
+
+// Load from disk or use default template
+let templateStages;
+let stageData = new Map();
+
+const loadedData = loadData(STAGES_FILE);
+if (loadedData) {
+  templateStages = loadedData.templateStages || buildTemplateFromStages(defaultTemplateStages);
+  stageData = objectToMap(loadedData.stageData || {});
+  console.log(`[INFO] Loaded template with ${templateStages.length} stages and ${stageData.size} project stages from disk`);
+} else {
+  templateStages = buildTemplateFromStages(defaultTemplateStages);
+  console.log('[INFO] Using default template stages');
+}
+
+// Helper to persist data to disk
+function persistStages() {
+  saveDataAsync(STAGES_FILE, {
+    templateStages,
+    stageData: mapToObject(stageData)
+  });
+}
 
 const slugify = value => {
   const text = String(value ?? '').toLowerCase().trim();
@@ -704,8 +729,6 @@ const slugify = value => {
 
 const allowedStatuses = new Set(['not_started', 'in_progress', 'completed']);
 const allowedTaskStatuses = new Set(['not_started', 'in_progress', 'blocked', 'completed']);
-
-const stageData = new Map();
 
 const ensureString = (value, fallback = '') =>
   typeof value === 'string' ? value : fallback;
@@ -991,10 +1014,12 @@ export const stageStore = {
   replaceTemplateDefinition(stagesInput) {
     const sanitised = sanitiseTemplateStages(stagesInput);
     templateStages = sanitised.map(cloneTemplateStageDefinition);
+    persistStages(); // Save to disk
     return buildTemplateFromStages(templateStages);
   },
   seedProjectStages(projectId) {
     ensureStages(projectId);
+    persistStages(); // Save to disk
   },
   list(projectId) {
     return ensureStages(projectId).map(cloneStage);
@@ -1012,6 +1037,7 @@ export const stageStore = {
       throw new Error('Stage not found');
     }
     stage.status = status;
+    persistStages(); // Save to disk
     return cloneStage(stage);
   },
   create({ projectId, name, dueDate }) {
@@ -1052,6 +1078,7 @@ export const stageStore = {
     };
     stage.tasks.push(task);
     recalculateStageStatus(stage);
+    persistStages(); // Save to disk
     return { ...task };
   },
   updateTaskStatus({ projectId, stageId, taskId, state }) {
@@ -1065,6 +1092,7 @@ export const stageStore = {
     if (!task) throw new Error('Task not found');
     task.state = state;
     recalculateStageStatus(stage);
+    persistStages(); // Save to disk
     return { ...task };
   },
   updateToggle({ projectId, stageId, toggleId, value }) {
@@ -1074,6 +1102,7 @@ export const stageStore = {
     const toggle = stage.toggles.find(item => item.templateToggleId === toggleId || item.id === toggleId);
     if (!toggle) throw new Error('Checklist item not found');
     toggle.value = Boolean(value);
+    persistStages(); // Save to disk
     return { ...toggle };
   },
   addToggle({ projectId, stageId, label, defaultValue = false }) {
@@ -1089,6 +1118,7 @@ export const stageStore = {
       value: Boolean(defaultValue)
     };
     stage.toggles.push(toggle);
+    persistStages(); // Save to disk
     return { ...toggle };
   },
   removeToggle({ projectId, stageId, toggleId }) {
@@ -1098,17 +1128,21 @@ export const stageStore = {
     const index = stage.toggles.findIndex(item => item.templateToggleId === toggleId || item.id === toggleId);
     if (index === -1) throw new Error('Checklist item not found');
     const [removed] = stage.toggles.splice(index, 1);
+    persistStages(); // Save to disk
     return removed ? { ...removed } : null;
   },
   refreshProjectStages(projectId) {
     // Clear the cached stages for this project and rebuild from the current template
     stageData.delete(projectId);
-    return ensureStages(projectId).map(cloneStage);
+    const stages = ensureStages(projectId).map(cloneStage);
+    persistStages(); // Save to disk
+    return stages;
   },
   refreshAllProjectStages() {
     // Clear all cached project stages and rebuild from the current template
     const projectIds = Array.from(stageData.keys());
     stageData.clear();
+    persistStages(); // Save to disk
     return projectIds;
   }
 };
