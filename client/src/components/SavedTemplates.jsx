@@ -38,11 +38,16 @@ export function SavedTemplates({ onLoadTemplate }) {
         await axios.put('/template/stages', { stages: template.stages });
         console.log('Template stages updated successfully');
         
-        // Invalidate the template-stages query to refresh the TemplateAdminPanel
-        queryClient.invalidateQueries(['template-stages']);
+        // Refresh all project stages to apply the new template
+        const refreshResponse = await axios.post('/template/refresh-projects');
+        console.log('Project stages refreshed:', refreshResponse.data);
+        
+        // Invalidate queries to refresh all views
+        queryClient.invalidateQueries(['template-stages']); // Refresh Template Admin Panel
+        queryClient.invalidateQueries({ queryKey: ['stages'] }); // Refresh all project stages in Dashboard
         
         // Show success message
-        alert(`✅ Template "${template.name}" loaded successfully!\n\n${template.stagesCount} stages have been loaded into the Template Admin Panel.`);
+        alert(`✅ Template "${template.name}" loaded successfully!\n\n${template.stagesCount} stages have been applied to the Template Admin Panel and all projects.`);
         
         if (onLoadTemplate) {
           onLoadTemplate(template);

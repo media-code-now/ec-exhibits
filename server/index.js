@@ -7,7 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import { authMiddleware, issueToken } from './middleware/auth.js';
-import { getUser, listUsers, addUser, removeUser } from './lib/users.js';
+import { getUser, listUsers, addUser, removeUser, getUserByEmail, validatePassword } from './lib/users.js';
 import { emailService } from './lib/email.js';
 import { projectStore } from './stores/projectStore.js';
 import { stageStore, stageStatuses, taskStatuses } from './stores/stageStore.js';
@@ -86,7 +86,32 @@ app.use((req, res, next) => {
   }
 });
 
-// Demo endpoint to get tokens for mock users
+// Login endpoint with email and password
+app.post('/auth/login', (req, res) => {
+  const { email, password } = req.body ?? {};
+  
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  
+  const user = getUserByEmail(email);
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+  
+  const isValid = validatePassword(user, password);
+  if (!isValid) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+  
+  const { passwordHash, ...safeUser } = user;
+  const token = issueToken(safeUser);
+  
+  console.log(`[AUTH] User logged in: ${safeUser.email} (${safeUser.role})`);
+  return res.json({ token, user: safeUser });
+});
+
+// Demo endpoint to get tokens for mock users (deprecated, kept for backward compatibility)
 app.post('/auth/token', (req, res) => {
   const { userId } = req.body ?? {};
   const user = getUser(userId);
@@ -110,8 +135,8 @@ app.post('/users', (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const { displayName, role, email } = req.body ?? {};
-    const user = addUser({ displayName, role, email });
+    const { displayName, role, email, password } = req.body ?? {};
+    const user = addUser({ displayName, role, email, password: password || 'password123' });
     const ownerRecipients = listUsers()
       .filter(candidate => candidate.role === 'owner' && candidate.id !== req.user.id)
       .map(candidate => candidate.id);
@@ -219,6 +244,25 @@ app.put('/template/stages', (req, res) => {
     res.json({ template: { stages: template } });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Endpoint to refresh all project stages with the current template
+app.post('/template/refresh-projects', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Only owners can refresh project templates' });
+  }
+  try {
+    const projectIds = stageStore.refreshAllProjectStages();
+    console.log('[POST /template/refresh-projects] Refreshed stages for projects:', projectIds);
+    res.json({ 
+      success: true, 
+      message: `Refreshed stages for ${projectIds.length} project(s)`,
+      projectIds 
+    });
+  } catch (error) {
+    console.error('[POST /template/refresh-projects] Error:', error);
+    res.status(500).json({ error: 'Failed to refresh project stages' });
   }
 });
 

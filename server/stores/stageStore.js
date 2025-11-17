@@ -1099,6 +1099,17 @@ export const stageStore = {
     if (index === -1) throw new Error('Checklist item not found');
     const [removed] = stage.toggles.splice(index, 1);
     return removed ? { ...removed } : null;
+  },
+  refreshProjectStages(projectId) {
+    // Clear the cached stages for this project and rebuild from the current template
+    stageData.delete(projectId);
+    return ensureStages(projectId).map(cloneStage);
+  },
+  refreshAllProjectStages() {
+    // Clear all cached project stages and rebuild from the current template
+    const projectIds = Array.from(stageData.keys());
+    stageData.clear();
+    return projectIds;
   }
 };
 
