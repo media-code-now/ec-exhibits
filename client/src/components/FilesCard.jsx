@@ -42,7 +42,6 @@ export function FilesCard({ projectId }) {
         window.URL.revokeObjectURL(url);
       }, 0);
     } catch (error) {
-      console.error('Download failed', error);
       window.alert('Unable to download that file. Please try again or refresh the page.');
     }
   };

@@ -74,6 +74,7 @@ function FilesCard({ category, files, onUpload, onUpdate, onDelete, onDownload, 
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState(null);
 
   const categoryName = FILE_CATEGORIES[category];
   const Icon = CATEGORY_ICONS[category];
@@ -102,6 +103,7 @@ function FilesCard({ category, files, onUpload, onUpdate, onDelete, onDownload, 
   const handleUploadFiles = async (filesToUpload) => {
     setUploading(true);
     setUploadProgress(0);
+    setUploadError(null);
 
     try {
       await onUpload(category, filesToUpload);
@@ -111,7 +113,7 @@ function FilesCard({ category, files, onUpload, onUpdate, onDelete, onDownload, 
         setUploadProgress(0);
       }, 1000);
     } catch (error) {
-      console.error('Upload failed:', error);
+      setUploadError(error.response?.data?.error || 'Upload failed. Please try again.');
       setUploading(false);
       setUploadProgress(0);
     }
@@ -179,6 +181,17 @@ function FilesCard({ category, files, onUpload, onUpdate, onDelete, onDownload, 
             onDrop={handleDrop}
           >
             <div className="text-center">
+              {uploadError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">{uploadError}</p>
+                  <button 
+                    onClick={() => setUploadError(null)}
+                    className="mt-2 text-xs text-red-500 hover:text-red-700 underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
               {uploading ? (
                 <div className="space-y-2">
                   <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -344,8 +357,7 @@ export default function FilesTab({ projectId, user }) {
       setStats(data.stats || {});
       setError(null);
     } catch (err) {
-      console.error('Error fetching files:', err);
-      setError(err.response?.data?.error || err.message);
+      setError(err.response?.data?.error || 'Failed to load files. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -375,7 +387,6 @@ export default function FilesTab({ projectId, user }) {
       // Refresh files after upload
       await fetchFiles();
     } catch (error) {
-      console.error('Upload error:', error);
       throw error;
     }
   };
@@ -395,7 +406,6 @@ export default function FilesTab({ projectId, user }) {
         return updated;
       });
     } catch (error) {
-      console.error('Update error:', error);
       // Refresh on error to revert optimistic update
       fetchFiles();
     }
@@ -412,7 +422,7 @@ export default function FilesTab({ projectId, user }) {
       // Refresh files after delete
       await fetchFiles();
     } catch (error) {
-      console.error('Delete error:', error);
+      alert('Failed to delete file. Please try again.');
     }
   };
 
@@ -432,7 +442,6 @@ export default function FilesTab({ projectId, user }) {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Download failed:', error);
       alert('Failed to download file. Please try again.');
     }
   };

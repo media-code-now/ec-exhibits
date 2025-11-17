@@ -592,7 +592,7 @@ export function Dashboard({
           {effectiveSection === 'template' && isOwner && (
             <div className="space-y-6">
               <SavedTemplates onLoadTemplate={(template) => {
-                console.log('Template loaded:', template.name);
+                // Template loaded successfully
               }} />
               <TemplateAdminPanel canEdit={isOwner} />
             </div>

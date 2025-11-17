@@ -48,7 +48,6 @@ export default function App() {
       setUser(data.user);
       setActiveSection('dashboard');
     } catch (err) {
-      console.error('Login error:', err);
       setError(err.response?.data?.error || 'Unable to sign in. Please check your credentials.');
     } finally {
       setIsLoggingIn(false);

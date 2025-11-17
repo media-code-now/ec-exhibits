@@ -83,16 +83,8 @@ export function TemplateAdminPanel({ canEdit }) {
 
   const saveAsTemplateMutation = useMutation({
     mutationFn: async ({ name, stages }) => {
-      console.log('Saving template:', { name, stagesCount: stages.length });
-      try {
-        const response = await axios.post('/template/saved', { name, stages });
-        console.log('Template saved successfully:', response.data);
-        return response.data;
-      } catch (error) {
-        console.error('Error saving template:', error);
-        console.error('Error response:', error.response?.data);
-        throw error;
-      }
+      const response = await axios.post('/template/saved', { name, stages });
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['saved-templates']);

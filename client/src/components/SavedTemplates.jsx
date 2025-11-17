@@ -1,66 +1,56 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 
 export function SavedTemplates({ onLoadTemplate }) {
   const queryClient = useQueryClient();
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   
   const { data: templatesData, isLoading, error } = useQuery({
     queryKey: ['saved-templates'],
     queryFn: async () => {
-      try {
-        console.log('Fetching saved templates list...');
-        const { data } = await axios.get('/template/saved');
-        console.log('Saved templates fetched:', data);
-        return data;
-      } catch (error) {
-        console.error('Error fetching saved templates:', error.response?.data || error.message);
-        throw error;
-      }
+      const { data } = await axios.get('/template/saved');
+      return data;
     }
   });
 
   const loadTemplateMutation = useMutation({
     mutationFn: async (templateId) => {
-      try {
-        console.log('Fetching template with ID:', templateId);
-        const { data } = await axios.get(`/template/saved/${templateId}`);
-        console.log('Template fetched successfully:', data);
-        return data.template;
-      } catch (error) {
-        console.error('Error fetching template:', error.response?.data || error.message);
-        throw error;
-      }
+      const { data } = await axios.get(`/template/saved/${templateId}`);
+      return data.template;
     },
     onSuccess: async (template) => {
-      console.log('Template loaded successfully, updating stages:', template);
       try {
         // Update the main template with the loaded template stages
         await axios.put('/template/stages', { stages: template.stages });
-        console.log('Template stages updated successfully');
         
         // Refresh all project stages to apply the new template
-        const refreshResponse = await axios.post('/template/refresh-projects');
-        console.log('Project stages refreshed:', refreshResponse.data);
+        await axios.post('/template/refresh-projects');
         
         // Invalidate queries to refresh all views
         queryClient.invalidateQueries(['template-stages']); // Refresh Template Admin Panel
         queryClient.invalidateQueries({ queryKey: ['stages'] }); // Refresh all project stages in Dashboard
         
         // Show success message
-        alert(`✅ Template "${template.name}" loaded successfully!\n\n${template.stagesCount} stages have been applied to the Template Admin Panel and all projects.`);
+        setSuccessMessage(`Template "${template.name}" loaded successfully! ${template.stagesCount} stages have been applied.`);
+        setErrorMessage(null);
+        
+        // Clear success message after 5 seconds
+        setTimeout(() => setSuccessMessage(null), 5000);
         
         if (onLoadTemplate) {
           onLoadTemplate(template);
         }
       } catch (error) {
-        console.error('Failed to update template stages:', error.response?.data || error.message);
-        alert(`Failed to update template: ${error.response?.data?.error || error.message}`);
+        setErrorMessage(`Failed to update template: ${error.response?.data?.error || error.message}`);
+        setSuccessMessage(null);
       }
     },
     onError: (error) => {
-      console.error('Template loading failed:', error.response?.data || error.message);
-      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      alert(`Failed to load template: ${errorMessage}`);
+      const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+      setErrorMessage(`Failed to load template: ${errorMsg}`);
+      setSuccessMessage(null);
     }
   });
 
@@ -74,7 +64,6 @@ export function SavedTemplates({ onLoadTemplate }) {
 
   const handleDeleteTemplate = (templateId) => {
     // TODO: Implement template deletion functionality
-    console.log('Deleting template:', templateId);
     alert('Delete functionality coming soon!');
   };
 
@@ -108,6 +97,32 @@ export function SavedTemplates({ onLoadTemplate }) {
         <h3 className="text-sm font-semibold text-slate-900">Saved Templates</h3>
         <span className="text-xs text-slate-500">{templates.length} templates</span>
       </div>
+      
+      {/* Success Message */}
+      {successMessage && (
+        <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start justify-between">
+          <p className="text-sm text-green-700">{successMessage}</p>
+          <button 
+            onClick={() => setSuccessMessage(null)}
+            className="text-green-600 hover:text-green-800 ml-2 text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      
+      {/* Error Message */}
+      {errorMessage && (
+        <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between">
+          <p className="text-sm text-red-700">{errorMessage}</p>
+          <button 
+            onClick={() => setErrorMessage(null)}
+            className="text-red-600 hover:text-red-800 ml-2 text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       
       {templates.length === 0 ? (
         <p className="text-sm text-slate-500">No saved templates yet.</p>

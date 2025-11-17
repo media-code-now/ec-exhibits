@@ -68,17 +68,14 @@ app.use((req, res, next) => {
     req.setEncoding('utf8');
     req.on('data', chunk => (raw += chunk));
     req.on('end', () => {
-      console.log('[DEBUG] /auth/token raw body:', raw);
       try {
         req.body = raw ? JSON.parse(raw) : {};
         next();
       } catch (err) {
-        console.error('[DEBUG] JSON parse error for /auth/token:', err, 'raw:', raw);
         return res.status(400).json({ error: 'Invalid JSON' });
       }
     });
     req.on('error', err => {
-      console.error('[DEBUG] req error on /auth/token:', err);
       return res.status(400).json({ error: 'Invalid request body' });
     });
   } else {
@@ -254,14 +251,14 @@ app.post('/template/refresh-projects', (req, res) => {
   }
   try {
     const projectIds = stageStore.refreshAllProjectStages();
-    console.log('[POST /template/refresh-projects] Refreshed stages for projects:', projectIds);
+    console.log(`[INFO] Refreshed stages for ${projectIds.length} project(s)`);
     res.json({ 
       success: true, 
       message: `Refreshed stages for ${projectIds.length} project(s)`,
       projectIds 
     });
   } catch (error) {
-    console.error('[POST /template/refresh-projects] Error:', error);
+    console.error('[ERROR] Failed to refresh project stages:', error.message);
     res.status(500).json({ error: 'Failed to refresh project stages' });
   }
 });
@@ -704,20 +701,14 @@ app.get('/template/saved/:id', (req, res) => {
 
 // POST endpoint to save a new template
 app.post('/template/saved', (req, res) => {
-  console.log('[POST /template/saved] Request received');
-  console.log('Body:', req.body);
-  console.log('User:', req.user);
-  
   try {
     const { name, stages } = req.body;
     
     if (!name || !name.trim()) {
-      console.log('[POST /template/saved] Error: Template name is required');
       return res.status(400).json({ error: 'Template name is required' });
     }
     
     if (!stages || !Array.isArray(stages) || stages.length === 0) {
-      console.log('[POST /template/saved] Error: Invalid stages');
       return res.status(400).json({ error: 'Template must have at least one stage' });
     }
     
@@ -732,14 +723,14 @@ app.post('/template/saved', (req, res) => {
       stages: stages
     };
     
-    console.log('[POST /template/saved] Success:', newTemplate.name);
+    console.log(`[INFO] Template saved: "${newTemplate.name}" with ${stages.length} stages`);
     res.status(201).json({ 
       success: true, 
       message: 'Template saved successfully',
       template: newTemplate
     });
   } catch (error) {
-    console.error('[POST /template/saved] Error:', error);
+    console.error('[ERROR] Failed to save template:', error.message);
     res.status(500).json({ error: 'Failed to save template' });
   }
 });
@@ -1596,7 +1587,7 @@ app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
     res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
     res.download(absolutePath, record.fileName, err => {
       if (err) {
-        console.error('Download error', err);
+        console.error('[ERROR] File download stream error:', err.message);
         if (!res.headersSent) {
           res.status(500).json({ error: 'Unable to download file' });
         } else {
@@ -1605,7 +1596,7 @@ app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Download error', error);
+    console.error('[ERROR] File download failed:', error.message);
     res.status(404).json({ error: 'File not found' });
   }
 });
@@ -1639,7 +1630,7 @@ app.use((err, req, res, next) => {
     });
   }
   
-  console.error('Unhandled error:', err);
+  console.error('[ERROR] Unhandled error:', err.message);
   res.status(500).json({ 
     error: 'An error occurred processing your request.' 
   });
