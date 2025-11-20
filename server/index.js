@@ -11,7 +11,7 @@ import { Server } from 'socket.io';
 import { authMiddleware, issueToken } from './middleware/auth.js';
 import { authRequired } from './middleware/authRequired.js';
 import { getUser, listUsers, addUser, removeUser } from './lib/users.js';
-import { registerUser, authenticateUser, getUserById, getAllUsers as getAllUsersFromDb } from './lib/auth.js';
+import { registerUser, authenticateUser, getUserById, getAllUsers as getAllUsersFromDb, updateUser, deleteUser as deleteUserFromDb } from './lib/auth.js';
 import { emailService } from './lib/email.js';
 import prisma, { query } from './lib/db.js';
 import { projectStore } from './stores/projectStore.js';
@@ -451,99 +451,196 @@ app.get('/db/test', async (req, res) => {
 // NOTE: We use authRequired middleware on individual routes that need authentication
 // The old authMiddleware.http is NOT used anymore (it expects Authorization header, not cookies)
 
-app.get('/users', authRequired, (req, res) => {
-  if (req.user.role !== 'owner') {
-    return res.status(403).json({ error: 'Forbidden' });
+app.get('/users', authRequired, async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only owners can view users' });
+    }
+
+    // Get all users from database
+    const users = await getAllUsersFromDb();
+    
+    res.json({ users });
+  } catch (error) {
+    console.error('[ERROR] Failed to fetch users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
-  res.json({ users: listUsers() });
 });
 
-app.post('/users', (req, res) => {
-  if (req.user.role !== 'owner') {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
+app.post('/users', authRequired, async (req, res) => {
   try {
+    // Only owners can create users
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only owners can create users' });
+    }
+
     const { displayName, role, email } = req.body ?? {};
-    const user = addUser({ displayName, role, email });
-    const ownerRecipients = listUsers()
-      .filter(candidate => candidate.role === 'owner' && candidate.id !== req.user.id)
-      .map(candidate => candidate.id);
+
+    // Validate input
+    if (!displayName || !email) {
+      return res.status(400).json({ error: 'Display name and email are required' });
+    }
+
+    if (!['owner', 'staff', 'client'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    // Check if user already exists in database
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+
+    // Create user in database (without password - will be set separately)
+    // Using a temporary password that will be replaced
+    const user = await prisma.user.create({
+      data: {
+        email: email.trim().toLowerCase(),
+        displayName: displayName.trim(),
+        role,
+        passwordHash: '' // Will be set when password is generated
+      },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    console.log('[INFO] User created:', user.email, 'Role:', user.role);
+
+    // Notify other owners
+    const ownerRecipients = await prisma.user.findMany({
+      where: {
+        role: 'owner',
+        id: { not: req.user.id }
+      },
+      select: { id: true }
+    });
+
     if (ownerRecipients.length > 0) {
+      const recipientIds = ownerRecipients.map(u => u.id);
       notificationStore.bumpUserChange({
-        recipients: ownerRecipients,
+        recipients: recipientIds,
         actorId: req.user.id,
         actorName: req.user.displayName,
         targetName: user.displayName,
-        role: role ?? user.role,
+        role: user.role,
         action: 'user_added'
       });
-      emitNotificationSummaries(ownerRecipients);
+      emitNotificationSummaries(recipientIds);
     }
+
     res.status(201).json({ user });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to create user:', error);
+    res.status(500).json({ error: 'Failed to create user' });
   }
 });
 
-app.delete('/users/:userId', (req, res) => {
-  if (req.user.role !== 'owner') {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const { userId } = req.params;
-  const record = getUser(userId);
-  if (!record) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-  if (record.role === 'owner') {
-    return res.status(400).json({ error: 'Owners cannot be deleted' });
-  }
+// Set password for a user
+app.post('/users/:userId/set-password', authRequired, async (req, res) => {
   try {
-    const affectedProjects = projectStore.removeUserFromAllProjects(userId);
-    const removed = removeUser(userId);
-
-    const summaryTargets = new Set();
-
-    affectedProjects.forEach(({ projectName, memberIds, role }) => {
-      const recipients = memberIds.filter(id => id !== req.user.id);
-      if (recipients.length === 0) return;
-      notificationStore.bumpUserChange({
-        recipients,
-        actorId: req.user.id,
-        actorName: req.user.displayName,
-        projectName,
-        targetName: removed.displayName,
-        role,
-        action: 'user_removed'
-      });
-      recipients.forEach(id => summaryTargets.add(id));
-    });
-
-    const ownerRecipients = listUsers()
-      .filter(candidate => candidate.role === 'owner' && candidate.id !== req.user.id)
-      .map(candidate => candidate.id);
-    if (ownerRecipients.length > 0) {
-      notificationStore.bumpUserChange({
-        recipients: ownerRecipients,
-        actorId: req.user.id,
-        actorName: req.user.displayName,
-        targetName: removed.displayName,
-        role: removed.role,
-        action: 'user_deleted'
-      });
-      ownerRecipients.forEach(id => summaryTargets.add(id));
+    // Only owners can set passwords
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only owners can set passwords' });
     }
 
-    emitNotificationSummary(req.user.id);
-    if (summaryTargets.size > 0) {
-      emitNotificationSummaries([...summaryTargets]);
+    const { userId } = req.params;
+    const { password } = req.body;
+
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    // Check if user exists in database
+    const existingUser = await getUserById(userId);
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update user with new password
+    await updateUser(userId, { password });
+
+    console.log('[INFO] Password set for user:', existingUser.email);
+
+    res.json({ 
+      success: true,
+      message: 'Password set successfully'
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to set password:', error);
+    res.status(500).json({ error: 'Failed to set password' });
+  }
+});
+
+app.delete('/users/:userId', authRequired, async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only owners can delete users' });
+    }
+
+    const { userId } = req.params;
+
+    // Get user from database
+    const user = await getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role === 'owner') {
+      return res.status(400).json({ error: 'Owners cannot be deleted' });
+    }
+
+    // Remove user from all projects
+    await prisma.projectMember.deleteMany({
+      where: { userId }
+    });
+
+    // Delete user from database
+    const deleted = await deleteUserFromDb(userId);
+
+    console.log('[INFO] User deleted:', deleted.email);
+
+    // Notify other owners
+    const ownerRecipients = await prisma.user.findMany({
+      where: {
+        role: 'owner',
+        id: { not: req.user.id }
+      },
+      select: { id: true }
+    });
+
+    if (ownerRecipients.length > 0) {
+      const recipientIds = ownerRecipients.map(u => u.id);
+      notificationStore.bumpUserChange({
+        recipients: recipientIds,
+        actorId: req.user.id,
+        actorName: req.user.displayName,
+        targetName: deleted.displayName,
+        role: deleted.role,
+        action: 'user_deleted'
+      });
+      emitNotificationSummaries(recipientIds);
     }
 
     res.json({
-      removedUser: { id: removed.id, displayName: removed.displayName, role: removed.role },
-      projects: affectedProjects.map(item => item.project)
+      success: true,
+      removedUser: { 
+        id: deleted.id, 
+        displayName: deleted.displayName, 
+        role: deleted.role 
+      }
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to delete user:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 
@@ -722,65 +819,131 @@ app.post('/projects', (req, res) => {
 });
 */
 
-app.post('/projects/:projectId/invite', (req, res) => {
-  const { projectId } = req.params;
-  const { userId, role } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const isOwner = project.members.some(member => member.userId === req.user.id && member.role === 'owner');
-  if (!isOwner) {
-    return res.status(403).json({ error: 'Only project owners can invite members' });
-  }
-  const alreadyMember = project.members.some(member => member.userId === userId);
-  if (alreadyMember) {
-    return res.status(409).json({ error: 'User already belongs to this project' });
-  }
+app.post('/projects/:projectId/invite', authRequired, async (req, res) => {
   try {
-    const updated = projectStore.addMember({ projectId, userId, role });
-    const invite = inviteStore.create({
-      projectId,
-      invitedUserId: userId,
-      invitedById: req.user.id,
-      role
-    });
-    const recipient = getUser(userId);
-    if (recipient?.email) {
-      const inviteLink = `${CLIENT_URL.replace(/\/$/, '')}/invite/${invite.id}`;
-      emailService.sendInvite({
-        to: recipient.email,
-        projectName: updated.name,
-        inviteLink,
-        role
-      });
+    const { projectId } = req.params;
+    const { userId, role } = req.body ?? {};
+
+    if (!userId || !role) {
+      return res.status(400).json({ error: 'User ID and role are required' });
     }
+
+    // Check if project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Check if current user is project owner
+    const isOwner = project.members.some(
+      member => member.userId === req.user.id && member.role === 'owner'
+    );
+
+    if (!isOwner) {
+      return res.status(403).json({ error: 'Only project owners can invite members' });
+    }
+
+    // Check if user is already a member
+    const alreadyMember = project.members.some(member => member.userId === userId);
+    if (alreadyMember) {
+      return res.status(409).json({ error: 'User already belongs to this project' });
+    }
+
+    // Check if invited user exists
+    const invitedUser = await getUserById(userId);
+    if (!invitedUser) {
+      return res.status(404).json({ error: 'Invited user not found' });
+    }
+
+    // Add member to project
+    await prisma.projectMember.create({
+      data: {
+        projectId,
+        userId,
+        role
+      }
+    });
+
+    console.log('[INFO] User added to project:', invitedUser.email, 'Role:', role);
+
+    // Get updated project
+    const updatedProject = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true
+              }
+            }
+          }
+        },
+        stages: {
+          orderBy: { position: 'asc' }
+        }
+      }
+    });
+
+    // Send notification to invited user
     notificationStore.bumpUserChange({
       recipients: [userId],
       actorId: req.user.id,
       actorName: req.user.displayName,
-      projectName: updated.name,
+      projectName: project.name,
       role,
       action: 'project_invite'
     });
 
-    const otherMembers = updated.members.map(member => member.userId).filter(candidate => candidate !== userId);
-    const summaryTargets = new Set([userId]);
+    // Notify other members
+    const otherMembers = updatedProject.members
+      .map(member => member.userId)
+      .filter(id => id !== userId && id !== req.user.id);
+
     if (otherMembers.length > 0) {
       notificationStore.bumpUserChange({
         recipients: otherMembers,
         actorId: req.user.id,
         actorName: req.user.displayName,
-        projectName: updated.name,
-        targetName: recipient?.displayName ?? 'New member',
+        projectName: project.name,
+        targetName: invitedUser.displayName,
         role,
         action: 'user_joined'
       });
-      otherMembers.forEach(id => summaryTargets.add(id));
     }
 
-    emitNotificationSummaries([...summaryTargets]);
-    res.json({ project: updated, invite });
+    const summaryTargets = [userId, ...otherMembers];
+    if (summaryTargets.length > 0) {
+      emitNotificationSummaries(summaryTargets);
+    }
+
+    res.json({ 
+      success: true,
+      project: updatedProject 
+    });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to invite user:', error);
+    res.status(500).json({ error: 'Failed to invite user to project' });
   }
 });
 
@@ -979,77 +1142,175 @@ app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
   }
 });
 
-app.post('/projects/:projectId/stages/:stageId/tasks', (req, res) => {
-  const { projectId, stageId } = req.params;
-  const { title, dueDate, assignee } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can manage tasks' });
-  }
+app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req, res) => {
   try {
-    const stageSnapshot = stageStore.list(projectId).find(item => item.id === stageId);
-    const stageName = stageSnapshot?.name ?? 'Stage';
-    const task = stageStore.addTask({ projectId, stageId, title, dueDate, assignee });
-    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
-    const progress = stageStore.projectProgress(projectId);
-    const memberIds = project.members.map(member => member.userId);
+    const { projectId, stageId } = req.params;
+    const { title, dueDate, assignee } = req.body ?? {};
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Task title is required' });
+    }
+
+    // Check project and membership
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can manage tasks' });
+    }
+
+    // Check if stage exists
+    const stage = await prisma.stage.findUnique({
+      where: { id: stageId }
+    });
+
+    if (!stage || stage.projectId !== projectId) {
+      return res.status(404).json({ error: 'Stage not found' });
+    }
+
+    // Create task
+    const task = await prisma.task.create({
+      data: {
+        stageId,
+        title: title.trim(),
+        status: 'not_started',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        assignee: assignee || null
+      }
+    });
+
+    console.log('[INFO] Task created:', task.title, 'in stage:', stage.name);
+
+    // Get all project members for notifications
+    const allMembers = await prisma.projectMember.findMany({
+      where: { projectId },
+      select: { userId: true }
+    });
+
+    const memberIds = allMembers.map(m => m.userId);
+
     notificationStore.bumpProjectChange({
       projectId,
       projectName: project.name,
       actorId: req.user.id,
       actorName: req.user.displayName,
       memberIds,
-      change: { type: 'task_created', stageName, taskTitle: task.title }
+      change: { type: 'task_created', stageName: stage.name, taskTitle: task.title }
     });
+
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
     }
-    emitNotificationSummary(req.user.id);
-    res.status(201).json({ task, stage: updatedStage, progress });
+
+    res.status(201).json({ task });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to create task:', error);
+    res.status(500).json({ error: 'Failed to create task' });
   }
 });
 
-app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', (req, res) => {
-  const { projectId, stageId, taskId } = req.params;
-  const { state } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can manage tasks' });
-  }
+app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, async (req, res) => {
   try {
-    const stageSnapshot = stageStore.list(projectId).find(item => item.id === stageId);
-    const taskSnapshot = stageSnapshot?.tasks?.find(item => item.id === taskId);
-    const stageName = stageSnapshot?.name ?? 'Stage';
-    const taskTitle = taskSnapshot?.title ?? 'Task';
-    const wasCompleted = taskSnapshot?.state === 'completed';
-    const task = stageStore.updateTaskStatus({ projectId, stageId, taskId, state });
-    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
-    const progress = stageStore.projectProgress(projectId);
-    const memberIds = project.members.map(member => member.userId);
-    const changeType = state === 'completed' && !wasCompleted ? 'task_completed' : 'task_status';
+    const { projectId, stageId, taskId } = req.params;
+    const { status } = req.body ?? {};
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    // Check project and membership
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can manage tasks' });
+    }
+
+    // Get existing task
+    const existingTask = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        stage: true
+      }
+    });
+
+    if (!existingTask || existingTask.stageId !== stageId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const wasCompleted = existingTask.status === 'completed';
+
+    // Update task
+    const task = await prisma.task.update({
+      where: { id: taskId },
+      data: { status }
+    });
+
+    console.log('[INFO] Task updated:', task.title, 'Status:', task.status);
+
+    // Get all project members for notifications
+    const allMembers = await prisma.projectMember.findMany({
+      where: { projectId },
+      select: { userId: true }
+    });
+
+    const memberIds = allMembers.map(m => m.userId);
+    const changeType = status === 'completed' && !wasCompleted ? 'task_completed' : 'task_status';
+
     notificationStore.bumpProjectChange({
       projectId,
       projectName: project.name,
       actorId: req.user.id,
       actorName: req.user.displayName,
       memberIds,
-      change: { type: changeType, stageName, taskTitle, status: state }
+      change: { 
+        type: changeType, 
+        stageName: existingTask.stage.name, 
+        taskTitle: task.title, 
+        status 
+      }
     });
+
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
     }
-    emitNotificationSummary(req.user.id);
-    res.json({ task, stage: updatedStage, progress });
+
+    res.json({ task });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to update task:', error);
+    res.status(500).json({ error: 'Failed to update task' });
   }
 });
 
@@ -1395,99 +1656,98 @@ app.get('/projects/:projectId/uploads', authRequired, async (req, res) => {
   }
 });
 
-app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
-  const { projectId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
+app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
 
-  // Only allow owner and staff to upload files
-  if (req.user.role !== 'owner' && req.user.role !== 'staff') {
-    return res.status(403).json({ error: 'Only administrators can upload files' });
-  }
-
-  const meta = JSON.parse(req.body.meta ?? '[]');
-  const bucket = ensureUploadBucket(projectId);
-  const isActiveRendering = req.body.isActiveRendering === 'true';
-  const category = req.body.category || null;
-
-  // If this is an active rendering upload, remove the old active rendering file
-  if (isActiveRendering) {
-    const oldActiveRendering = bucket.find(file => file.isActiveRendering);
-    if (oldActiveRendering) {
-      // Delete the physical file
-      const filePath = path.join(__dirname, oldActiveRendering.storagePath);
-      try {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+    // Check project and membership
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
         }
-      } catch (error) {
-        console.error('Failed to delete old active rendering file:', error);
       }
-      // Remove from bucket
-      const index = bucket.indexOf(oldActiveRendering);
-      if (index > -1) {
-        bucket.splice(index, 1);
-      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
     }
-  }
 
-  const entries = req.files.map((file, index) => {
-    const record = {
-      id: file.filename,
-      projectId,
-      uploadedBy: req.user,
-      fileName: file.originalname,
-      storedName: file.filename,
-      storagePath: path.relative(__dirname, path.join(uploadDir, file.filename)),
-      size: file.size,
-      contentType: file.mimetype,
-      label: meta[index]?.label ?? '',
-      remarks: meta[index]?.remarks ?? '',
-      requiresReview: Boolean(meta[index]?.requiresReview),
-      isActiveRendering: isActiveRendering,
-      category: category,
-      uploadedAt: new Date().toISOString()
-    };
-    bucket.push(record);
-    return record;
-  });
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
-  notificationStore.bumpUploads({
-    projectId,
-    projectName: project.name,
-    actorId: req.user.id,
-    actorName: req.user.displayName,
-    memberIds: members,
-    count: entries.length,
-    fileNames: entries.map(entry => entry.fileName)
-  });
+    // Only allow owner and staff to upload files
+    if (req.user.role !== 'owner' && req.user.role !== 'staff') {
+      return res.status(403).json({ error: 'Only administrators can upload files' });
+    }
 
-  if (req.user.role === 'client') {
-    notificationStore.bumpProjectChange({
+    const meta = JSON.parse(req.body.meta ?? '[]');
+    const category = req.body.category || null;
+
+    // Create upload records in database
+    const uploads = [];
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      const upload = await prisma.upload.create({
+        data: {
+          projectId,
+          uploaderId: req.user.id,
+          fileName: file.originalname,
+          storedName: file.filename,
+          storagePath: path.relative(__dirname, path.join(uploadDir, file.filename)),
+          size: file.size,
+          contentType: file.mimetype,
+          label: meta[i]?.label ?? '',
+          remarks: meta[i]?.remarks ?? '',
+          requiresReview: Boolean(meta[i]?.requiresReview),
+          category: category
+        },
+        include: {
+          uploader: {
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+              role: true
+            }
+          }
+        }
+      });
+      uploads.push(upload);
+    }
+
+    console.log('[INFO] Uploaded', uploads.length, 'file(s) to project:', project.name);
+
+    // Get all project members for notifications
+    const allMembers = await prisma.projectMember.findMany({
+      where: { projectId },
+      select: { userId: true }
+    });
+
+    const memberIds = allMembers.map(m => m.userId);
+
+    notificationStore.bumpUploads({
       projectId,
       projectName: project.name,
       actorId: req.user.id,
       actorName: req.user.displayName,
-      memberIds: members,
-      change: {
-        type: 'client_upload',
-        count: entries.length,
-        fileNames: entries.map(entry => entry.fileName)
-      }
+      memberIds,
+      count: uploads.length
     });
-  }
 
-  const recipients = members.filter(id => id !== req.user.id);
-  if (recipients.length > 0) {
-    emitNotificationSummaries(recipients);
-  }
-  emitNotificationSummary(req.user.id);
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    emitNotificationSummary(req.user.id);
 
-  res.json({ uploaded: entries });
+    res.json({ uploaded: uploads });
+  } catch (error) {
+    console.error('[ERROR] Failed to upload files:', error);
+    res.status(500).json({ error: 'Failed to upload files' });
+  }
 });
 
 app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {

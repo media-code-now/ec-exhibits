@@ -377,14 +377,34 @@ export function Dashboard({
     const password = generateRandomPassword();
     setGeneratedPasswords(previous => ({ ...previous, [userId]: password }));
     let status = 'generated';
+    
     try {
+      // Send password to backend to save in database
+      const response = await fetch(`${API_BASE}/users/${userId}/set-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ password })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save password');
+      }
+
+      console.log('Password saved to database for user:', userId);
+
+      // Copy to clipboard
       const copied = await copyTextToClipboard(password);
       if (copied) {
         status = 'copied';
       }
     } catch (error) {
+      console.error('Error generating password:', error);
       status = 'generated';
     }
+    
     setPasswordNotices(previous => ({ ...previous, [userId]: status }));
     schedulePasswordNoticeClear(userId);
   };
