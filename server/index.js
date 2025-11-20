@@ -387,6 +387,16 @@ app.post('/projects', authRequired, async (req, res) => {
   }
 });
 
+// Environment check endpoint (for debugging)
+app.get('/env/check', (req, res) => {
+  res.json({
+    hasDatabase: !!process.env.DATABASE_URL,
+    hasJWT: !!process.env.JWT_SECRET,
+    nodeEnv: process.env.NODE_ENV,
+    databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + '...' : 'NOT SET'
+  });
+});
+
 // Database connection test endpoint
 app.get('/db/test', async (req, res) => {
   try {
