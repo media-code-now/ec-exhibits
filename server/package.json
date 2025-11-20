@@ -5,7 +5,7 @@
   "description": "Express + Socket.IO server for EC Exhibits client portal prototype with Neon Postgres",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "npx prisma generate && node index.js",
     "dev": "node index.js",
     "build": "npx prisma generate",
     "setup-db": "npx prisma generate && npx prisma db push",

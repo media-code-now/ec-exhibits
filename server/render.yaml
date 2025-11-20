@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: ec-exhibits-server
+    env: node
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ALLOWED_ORIGIN
+        value: http://localhost:5173
+      - key: PROD_ORIGIN
+        value: https://ec-exhibits.netlify.app
+      - key: CLIENT_URL
+        value: https://ec-exhibits.netlify.app
