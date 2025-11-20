@@ -34,7 +34,7 @@ app.use('/api/admin', authRequired);
 
 app.get('/api/admin/users', (req, res) => {
   // req.user available
-  res.json({ users: [...], requestedBy: req.user });
+  res.json({ users: [] /* your users array */, requestedBy: req.user });
 });
 
 app.delete('/api/admin/users/:id', (req, res) => {
@@ -56,7 +56,7 @@ app.get('/dashboard', (req, res) => {
 });
 
 app.get('/projects', (req, res) => {
-  res.json({ projects: [...], userId: req.user.id });
+  res.json({ projects: [] /* your projects */, userId: req.user.id });
 });
 
 // ==============================================================
@@ -85,10 +85,10 @@ function optionalAuth(req, res, next) {
 app.get('/api/posts', optionalAuth, (req, res) => {
   if (req.user) {
     // User is logged in - show personalized content
-    res.json({ posts: [...], personalized: true });
+    res.json({ posts: [] /* personalized posts */, personalized: true });
   } else {
     // Not logged in - show public content
-    res.json({ posts: [...], personalized: false });
+    res.json({ posts: [] /* public posts */, personalized: false });
   }
 });
 
@@ -134,7 +134,7 @@ app.use('/api/posts', conditionalAuth);
 
 app.get('/api/posts', (req, res) => {
   // No auth required for viewing posts
-  res.json({ posts: [...] });
+  res.json({ posts: [] /* all posts */ });
 });
 
 app.post('/api/posts', (req, res) => {

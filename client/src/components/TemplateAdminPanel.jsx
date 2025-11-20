@@ -55,23 +55,25 @@ export function TemplateAdminPanel({ canEdit }) {
     }
   });
 
-  const templateStages = data?.template?.stages ?? [];
   const [draftStages, setDraftStages] = useState([]);
 
+  // Use data directly in useEffect dependency to avoid reference issues
   useEffect(() => {
-    setDraftStages(
-      templateStages.map(stage => ({
-        ...stage,
-        defaultStageDueInDays: stage.defaultStageDueInDays ?? 0,
-        tasks: stage.tasks.map(task => ({ ...task })),
-        uploads: stage.uploads.map(upload => ({
-          ...upload,
-          acceptedTypesText: formatAcceptedTypes(upload.acceptedTypes ?? [])
-        })),
-        toggles: stage.toggles.map(toggle => ({ ...toggle }))
-      }))
-    );
-  }, [templateStages]);
+    if (data?.template?.stages) {
+      setDraftStages(
+        data.template.stages.map(stage => ({
+          ...stage,
+          defaultStageDueInDays: stage.defaultStageDueInDays ?? 0,
+          tasks: stage.tasks.map(task => ({ ...task })),
+          uploads: stage.uploads.map(upload => ({
+            ...upload,
+            acceptedTypesText: formatAcceptedTypes(upload.acceptedTypes ?? [])
+          })),
+          toggles: stage.toggles.map(toggle => ({ ...toggle }))
+        }))
+      );
+    }
+  }, [data]);
 
   const updateTemplateMutation = useMutation({
     mutationFn: payload => axios.put('/template/stages', payload).then(({ data: response }) => response),

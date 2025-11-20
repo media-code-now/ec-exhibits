@@ -63,7 +63,8 @@ export function Dashboard({
   onProjectCreated,
   onProjectUpdated,
   activeSection = 'dashboard',
-  onSectionChange
+  onSectionChange,
+  onLogout
 }) {
   const queryClient = useQueryClient();
   const isOwner = user.role === 'owner';
@@ -535,6 +536,13 @@ export function Dashboard({
                   <p className="text-xs uppercase tracking-wide text-slate-400">{user.role}</p>
                 </div>
               </div>
+              <button
+                onClick={onLogout}
+                className="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                title="Logout"
+              >
+                Logout
+              </button>
             </div>
           </header>
 

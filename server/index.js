@@ -554,12 +554,12 @@ app.put('/template/stages', authRequired, (req, res) => {
 });
 
 // Template management endpoints
-app.get('/templates', (req, res) => {
+app.get('/templates', authRequired, (req, res) => {
   const templates = templateStore.listTemplates();
   res.json({ templates });
 });
 
-app.get('/templates/:id', (req, res) => {
+app.get('/templates/:id', authRequired, (req, res) => {
   const { id } = req.params;
   const template = templateStore.getTemplate(id);
   if (!template) {
@@ -568,7 +568,7 @@ app.get('/templates/:id', (req, res) => {
   res.json({ template });
 });
 
-app.post('/templates', (req, res) => {
+app.post('/templates', authRequired, (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can create templates' });
   }
@@ -584,7 +584,7 @@ app.post('/templates', (req, res) => {
   }
 });
 
-app.put('/templates/:id', (req, res) => {
+app.put('/templates/:id', authRequired, (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can update templates' });
   }
@@ -597,7 +597,7 @@ app.put('/templates/:id', (req, res) => {
   }
 });
 
-app.delete('/templates/:id', (req, res) => {
+app.delete('/templates/:id', authRequired, (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can delete templates' });
   }
