@@ -495,13 +495,13 @@ app.post('/users', authRequired, async (req, res) => {
     }
 
     // Create user in database (without password - will be set separately)
-    // Using a temporary password that will be replaced
+    // Use a random placeholder hash that will be replaced when password is generated
     const user = await prisma.user.create({
       data: {
         email: email.trim().toLowerCase(),
         displayName: displayName.trim(),
         role,
-        passwordHash: '' // Will be set when password is generated
+        passwordHash: 'PENDING_PASSWORD_SETUP' // Placeholder - will be replaced by set-password endpoint
       },
       select: {
         id: true,
