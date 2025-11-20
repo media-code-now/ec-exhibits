@@ -57,7 +57,10 @@ export function TemplateAdminPanel({ canEdit }) {
 
   const [draftStages, setDraftStages] = useState([]);
 
-  // Use data directly in useEffect dependency to avoid reference issues
+  // Get template stages from data (use useMemo to keep reference stable)
+  const templateStages = useMemo(() => data?.template?.stages ?? [], [data]);
+
+  // Initialize draftStages when template data loads
   useEffect(() => {
     if (data?.template?.stages) {
       setDraftStages(
