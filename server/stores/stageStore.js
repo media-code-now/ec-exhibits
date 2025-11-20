@@ -996,6 +996,11 @@ export const stageStore = {
   seedProjectStages(projectId) {
     ensureStages(projectId);
   },
+  reinitializeProjectStages(projectId) {
+    // Replace existing stages with fresh stages from the current template
+    stageData.set(projectId, buildStagesForProject(projectId));
+    return stageData.get(projectId);
+  },
   list(projectId) {
     return ensureStages(projectId).map(cloneStage);
   },

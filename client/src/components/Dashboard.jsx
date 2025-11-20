@@ -7,9 +7,11 @@ import { ProgressStages } from './ProgressStages.jsx';
 import { ProjectChat } from './ProjectChat.jsx';
 import { InvoicesCard } from './InvoicesCard.jsx';
 import { FilesCard } from './FilesCard.jsx';
+import { ProjectFilesCard } from './ProjectFilesCard.jsx';
 import { FileDropzone } from './FileDropzone.jsx';
 import logoMark from '../assets/exhibit-control-logo.svg';
 import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
+import { SavedTemplatesList } from './SavedTemplatesList.jsx';
 import { ChecklistPanel } from './ChecklistPanel.jsx';
 
 const generateRandomPassword = (length = 14) => {
@@ -520,16 +522,16 @@ export function Dashboard({
           <header className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-sm text-slate-500">Welcome back</p>
-              <h2 className="text-2xl font-semibold text-slate-900">{user.displayName}</h2>
+              <h2 className="text-2xl font-semibold text-slate-900">{user.name || user.displayName || user.email}</h2>
             </div>
             <div className="flex items-center gap-3">
               <NotificationBell token={token} projects={projects} />
               <div className="flex items-center gap-3 rounded-full bg-white px-4 py-2 shadow-sm">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-600">
-                  {user.displayName.slice(0, 1)}
+                  {(user.name || user.displayName || user.email || 'U').slice(0, 1).toUpperCase()}
                 </span>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{user.displayName}</p>
+                  <p className="text-sm font-semibold text-slate-800">{user.name || user.displayName || user.email}</p>
                   <p className="text-xs uppercase tracking-wide text-slate-400">{user.role}</p>
                 </div>
               </div>
@@ -574,23 +576,20 @@ export function Dashboard({
                   isUpdating={updateInvoiceStatusMutation.isPending}
                 />
                 <FilesCard projectId={project.id} />
-                <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-                  <h3 className="text-base font-semibold text-slate-900">Upload Invoice or Project Files</h3>
-                  <p className="mb-4 text-sm text-slate-500">Attach deliverables with Yes/No review flags.</p>
-                  <FileDropzone projectId={project.id} />
-                </div>
+                {(isOwner || isStaff) && (
+                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+                    <h3 className="text-base font-semibold text-slate-900">Upload Display Active Rendering</h3>
+                    <p className="mb-4 text-sm text-slate-500">Attach deliverables with Yes/No review flags.</p>
+                    <FileDropzone projectId={project.id} isActiveRenderingUpload={true} />
+                  </div>
+                )}
               </div>
             </section>
           )}
 
           {effectiveSection === 'files' && (
             <section className="space-y-8">
-              <FilesCard projectId={project.id} />
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
-                <h3 className="text-base font-semibold text-slate-900">Upload Files</h3>
-                <p className="mb-4 text-sm text-slate-500">Drag and drop documents to share with the team.</p>
-                <FileDropzone projectId={project.id} />
-              </div>
+              <ProjectFilesCard projectId={project.id} canUpload={isOwner || isStaff} />
             </section>
           )}
 
@@ -599,7 +598,10 @@ export function Dashboard({
           )}
 
           {effectiveSection === 'template' && isOwner && (
-            <TemplateAdminPanel canEdit={isOwner} />
+            <div className="space-y-6">
+              <SavedTemplatesList projectId={project.id} />
+              <TemplateAdminPanel canEdit={isOwner} />
+            </div>
           )}
 
           {effectiveSection === 'projects' && isOwner && (

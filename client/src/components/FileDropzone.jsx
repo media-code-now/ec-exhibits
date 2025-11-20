@@ -12,7 +12,7 @@ const defaultMeta = file => ({
   requiresReview: false
 });
 
-export function FileDropzone({ projectId }) {
+export function FileDropzone({ projectId, isActiveRenderingUpload = false, category = null }) {
   const [items, setItems] = useState([]);
   const queryClient = useQueryClient();
 
@@ -40,6 +40,14 @@ export function FileDropzone({ projectId }) {
           }))
         )
       );
+      // Add flag to indicate this is an active rendering upload
+      if (isActiveRenderingUpload) {
+        formData.append('isActiveRendering', 'true');
+      }
+      // Add category if specified
+      if (category) {
+        formData.append('category', category);
+      }
       const { data } = await axios.post(`/projects/${projectId}/uploads`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });

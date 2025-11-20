@@ -4,11 +4,16 @@ import http from 'http';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import cookieParser from 'cookie-parser';
+import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import { authMiddleware, issueToken } from './middleware/auth.js';
+import { authRequired } from './middleware/authRequired.js';
 import { getUser, listUsers, addUser, removeUser } from './lib/users.js';
+import { registerUser, authenticateUser, getUserById, getAllUsers as getAllUsersFromDb } from './lib/auth.js';
 import { emailService } from './lib/email.js';
+import prisma, { query } from './lib/db.js';
 import { projectStore } from './stores/projectStore.js';
 import { stageStore, stageStatuses, taskStatuses } from './stores/stageStore.js';
 import { checklistStore } from './stores/checklistStore.js';
@@ -16,6 +21,7 @@ import { invoiceStore } from './stores/invoiceStore.js';
 import { inviteStore } from './stores/inviteStore.js';
 import { messageStore } from './stores/messageStore.js';
 import { notificationStore } from './stores/notificationStore.js';
+import * as templateStore from './stores/templateStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +58,9 @@ function emitNotificationSummaries(userIds) {
 }
 
 app.use(cors({ origin: corsOriginHandler, credentials: true }));
+
+// Cookie parser middleware for reading/setting cookies
+app.use(cookieParser());
 
 // Log effective origin configuration for debugging
 console.log('[INFO] Allowed origin (dev):', ALLOWED_ORIGIN);
@@ -92,6 +101,329 @@ app.post('/auth/token', (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
   const token = issueToken(user);
   return res.json({ token, user });
+});
+
+// User registration endpoint (no auth required)
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { email, password, displayName, role } = req.body;
+
+    if (!email || !password || !displayName) {
+      return res.status(400).json({ error: 'Email, password, and display name are required' });
+    }
+
+    const user = await registerUser({ email, password, displayName, role });
+    const token = issueToken(user);
+
+    console.log('[INFO] New user registered:', user.email);
+    
+    res.status(201).json({ 
+      success: true,
+      token, 
+      user 
+    });
+  } catch (error) {
+    console.error('[ERROR] Registration failed:', error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// User login endpoint (no auth required)
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // 2. Look up user by email in Neon and verify password with bcrypt
+    const user = await authenticateUser(email, password);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // 3. Sign JWT with userId and 7-day expiration
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+      console.error('[ERROR] JWT_SECRET not configured');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' } // 7 days expiration
+    );
+
+    // 4. Send JWT as HTTP-only cookie
+    res.cookie('token', token, {
+      httpOnly: true,        // Cannot be accessed by client-side JavaScript
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-site (Netlify -> Render)
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+    });
+
+    console.log('[INFO] User logged in:', user.email);
+
+    // 5. Return user data (without password_hash)
+    res.json({ 
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('[ERROR] Login failed:', error.message);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// User logout endpoint - clears the cookie
+app.post('/auth/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+  });
+  
+  res.json({ 
+    success: true,
+    message: 'Logged out successfully' 
+  });
+});
+
+// GET /auth/me - Get current user from database
+app.get('/auth/me', authRequired, async (req, res) => {
+  try {
+    // req.user is set by authRequired middleware: { id, email, role }
+    // Query Neon for the user by req.user.id
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    
+    // Handle case where user is not found (deleted after login)
+    if (!user) {
+      return res.status(404).json({ 
+        error: 'User not found' 
+      });
+    }
+    
+    // Return user data
+    res.json({ 
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.displayName, // Return as 'name' per requirement
+        role: user.role,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to fetch user:', error.message);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+// GET /projects - Get all projects for authenticated user
+app.get('/projects', authRequired, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Query projects where user is a member
+    const projectMembers = await prisma.projectMember.findMany({
+      where: { userId },
+      include: {
+        project: {
+          include: {
+            stages: {
+              orderBy: { position: 'asc' }
+            },
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    displayName: true,
+                    role: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    // Extract projects from project members
+    const projects = projectMembers.map(pm => pm.project);
+    
+    res.json({ 
+      success: true,
+      projects 
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to fetch projects:', error.message);
+    res.status(500).json({ error: 'Failed to fetch projects' });
+  }
+});
+
+// POST /projects - Create a new project
+app.post('/projects', authRequired, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, show, size, moveInDate, openingDay, description } = req.body;
+    
+    // Validate required fields
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Project name is required' 
+      });
+    }
+    
+    console.log('[INFO] Creating project:', { name, show, size, userId });
+    
+    // Create project
+    const project = await prisma.project.create({
+      data: {
+        name: name.trim(),
+        show: show?.trim() || null,
+        size: size?.trim() || null,
+        moveInDate: moveInDate ? new Date(moveInDate) : null,
+        openingDay: openingDay ? new Date(openingDay) : null,
+        description: description?.trim() || null
+      }
+    });
+    
+    console.log('[INFO] Project created:', project.id);
+    
+    // Add user as project owner
+    await prisma.projectMember.create({
+      data: {
+        projectId: project.id,
+        userId,
+        role: 'owner'
+      }
+    });
+    
+    console.log('[INFO] User added as owner');
+    
+    // Create default stages
+    const stages = [
+      { templateSlug: 'planning', name: 'Planning', position: 0, status: 'in_progress' },
+      { templateSlug: 'production', name: 'Production', position: 1, status: 'not_started' },
+      { templateSlug: 'shipping', name: 'Shipping', position: 2, status: 'not_started' },
+      { templateSlug: 'installation', name: 'Installation', position: 3, status: 'not_started' },
+      { templateSlug: 'closeout', name: 'Closeout', position: 4, status: 'not_started' }
+    ];
+    
+    for (const stage of stages) {
+      await prisma.stage.create({
+        data: { 
+          projectId: project.id,
+          ...stage
+        }
+      });
+    }
+    
+    console.log('[INFO] Default stages created');
+    
+    // Return project with stages and members
+    const fullProject = await prisma.project.findUnique({
+      where: { id: project.id },
+      include: { 
+        stages: {
+          orderBy: { position: 'asc' }
+        },
+        members: { 
+          include: { 
+            user: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true
+              }
+            }
+          } 
+        }
+      }
+    });
+    
+    console.log('[SUCCESS] Project creation complete');
+    
+    res.json({ 
+      success: true, 
+      project: fullProject 
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to create project:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create project' 
+    });
+  }
+});
+
+// Database connection test endpoint
+app.get('/db/test', async (req, res) => {
+  try {
+    // Test 1: Raw SQL query
+    const result = await query('SELECT 1 as test_value, NOW() as server_time');
+    
+    // Test 2: Count users with Prisma
+    const userCount = await prisma.user.count();
+    
+    // Test 3: Get all users
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        createdAt: true
+      }
+    });
+    
+    res.json({ 
+      success: true,
+      message: 'Database connection successful!',
+      tests: {
+        rawQuery: result.rows[0],
+        userCount,
+        users
+      }
+    });
+  } catch (error) {
+    console.error('Database test failed:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 
 // Protect everything below
@@ -197,7 +529,7 @@ app.get('/me', (req, res) => {
   res.json({ user: req.user, projects: projectStore.listForUser(req.user.id) });
 });
 
-app.get('/template/stages', (req, res) => {
+app.get('/template/stages', authRequired, (req, res) => {
   const template = stageStore.getTemplateDefinition();
   res.json({
     template: { stages: template },
@@ -205,7 +537,7 @@ app.get('/template/stages', (req, res) => {
   });
 });
 
-app.put('/template/stages', (req, res) => {
+app.put('/template/stages', authRequired, (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can update the template' });
   }
@@ -216,6 +548,63 @@ app.put('/template/stages', (req, res) => {
     }
     const template = stageStore.replaceTemplateDefinition(stages);
     res.json({ template: { stages: template } });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Template management endpoints
+app.get('/templates', (req, res) => {
+  const templates = templateStore.listTemplates();
+  res.json({ templates });
+});
+
+app.get('/templates/:id', (req, res) => {
+  const { id } = req.params;
+  const template = templateStore.getTemplate(id);
+  if (!template) {
+    return res.status(404).json({ error: 'Template not found' });
+  }
+  res.json({ template });
+});
+
+app.post('/templates', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Only owners can create templates' });
+  }
+  try {
+    const { name, description, stages } = req.body;
+    if (!name || !stages || !Array.isArray(stages) || stages.length === 0) {
+      throw new Error('Name and stages are required');
+    }
+    const template = templateStore.createTemplate({ name, description, stages });
+    res.json({ template });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/templates/:id', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Only owners can update templates' });
+  }
+  try {
+    const { id } = req.params;
+    const template = templateStore.updateTemplate(id, req.body);
+    res.json({ template });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/templates/:id', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Only owners can delete templates' });
+  }
+  try {
+    const { id } = req.params;
+    templateStore.deleteTemplate(id);
+    res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -432,6 +821,56 @@ app.get('/projects/:projectId/stages', (req, res) => {
   const stages = stageStore.list(projectId);
   const progress = stageStore.projectProgress(projectId);
   res.json({ stages, statuses: stageStatuses, taskStatuses, progress });
+});
+
+app.post('/projects/:projectId/apply-template', (req, res) => {
+  const { projectId } = req.params;
+  const { templateId } = req.body ?? {};
+  const project = projectStore.get(projectId);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const member = project.members.find(item => item.userId === req.user.id);
+  if (!member || (member.role !== 'owner' && member.role !== 'staff')) {
+    return res.status(403).json({ error: 'Only owners or staff can apply templates' });
+  }
+  
+  try {
+    // Get the template
+    const template = templateStore.getTemplate(templateId);
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    
+    // Update the global template definition with this template's stages
+    stageStore.replaceTemplateDefinition(template.stages);
+    
+    // Reinitialize the project's stages from the new template
+    stageStore.reinitializeProjectStages(projectId);
+    
+    // Get the updated stages
+    const stages = stageStore.list(projectId);
+    const progress = stageStore.projectProgress(projectId);
+    
+    // Notify all project members
+    const memberIds = project.members.map(m => m.userId);
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds,
+      change: { type: 'template_applied', templateName: template.name }
+    });
+    
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    
+    res.json({ stages, progress, message: 'Template applied successfully' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
@@ -727,8 +1166,37 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
+  // Only allow owner and staff to upload files
+  if (req.user.role !== 'owner' && req.user.role !== 'staff') {
+    return res.status(403).json({ error: 'Only administrators can upload files' });
+  }
+
   const meta = JSON.parse(req.body.meta ?? '[]');
   const bucket = ensureUploadBucket(projectId);
+  const isActiveRendering = req.body.isActiveRendering === 'true';
+  const category = req.body.category || null;
+
+  // If this is an active rendering upload, remove the old active rendering file
+  if (isActiveRendering) {
+    const oldActiveRendering = bucket.find(file => file.isActiveRendering);
+    if (oldActiveRendering) {
+      // Delete the physical file
+      const filePath = path.join(__dirname, oldActiveRendering.storagePath);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (error) {
+        console.error('Failed to delete old active rendering file:', error);
+      }
+      // Remove from bucket
+      const index = bucket.indexOf(oldActiveRendering);
+      if (index > -1) {
+        bucket.splice(index, 1);
+      }
+    }
+  }
+
   const entries = req.files.map((file, index) => {
     const record = {
       id: file.filename,
@@ -742,6 +1210,8 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
       label: meta[index]?.label ?? '',
       remarks: meta[index]?.remarks ?? '',
       requiresReview: Boolean(meta[index]?.requiresReview),
+      isActiveRendering: isActiveRendering,
+      category: category,
       uploadedAt: new Date().toISOString()
     };
     bucket.push(record);

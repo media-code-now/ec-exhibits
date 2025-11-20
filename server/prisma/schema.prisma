@@ -1,0 +1,268 @@
+// Prisma Schema for EC-Exhibits Portal
+// Database: Neon Postgres
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  displayName   String    @map("display_name")
+  role          String    // 'owner', 'staff', 'client'
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  projectMembers    ProjectMember[]
+  uploads           Upload[]
+  sentMessages      Message[]
+  messageReads      MessageRead[]
+  notifications     Notification[]
+  invitesSent       Invite[]        @relation("InvitedBy")
+  invitesReceived   Invite[]        @relation("InvitedUser")
+
+  @@map("users")
+}
+
+model Project {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  show        String?
+  size        String?
+  moveInDate  DateTime? @map("move_in_date") @db.Date
+  openingDay  DateTime? @map("opening_day") @db.Date
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  members       ProjectMember[]
+  stages        Stage[]
+  uploads       Upload[]
+  invoices      Invoice[]
+  messages      Message[]
+  notifications Notification[]
+  invites       Invite[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   // 'owner', 'staff', 'client'
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+model Stage {
+  id                    String   @id @default(uuid()) @db.Uuid
+  projectId             String   @map("project_id") @db.Uuid
+  templateSlug          String?  @map("template_slug")
+  name                  String
+  description           String?
+  status                String   @default("not_started") // 'not_started', 'in_progress', 'completed', 'on_hold'
+  dueDate               DateTime? @map("due_date") @db.Date
+  defaultDueOffsetDays  Int?     @map("default_due_offset_days")
+  permissions           Json     @default("{}")
+  position              Int      @default(0)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks             Task[]
+  uploadDefinitions UploadDefinition[]
+  toggles           Toggle[]
+
+  @@index([projectId])
+  @@map("stages")
+}
+
+model Task {
+  id                  String   @id @default(uuid()) @db.Uuid
+  stageId             String   @map("stage_id") @db.Uuid
+  templateSlug        String?  @map("template_slug")
+  title               String
+  state               String   @default("not_started") // 'not_started', 'in_progress', 'completed', 'blocked'
+  dueDate             DateTime? @map("due_date") @db.Date
+  assignee            String?
+  ownerRole           String?  @map("owner_role")
+  requiresClientInput Boolean  @default(false) @map("requires_client_input")
+  requiredUploadIds   Json     @default("[]") @map("required_upload_ids")
+  position            Int      @default(0)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  stage Stage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@index([stageId])
+  @@map("tasks")
+}
+
+model UploadDefinition {
+  id            String   @id @default(uuid()) @db.Uuid
+  stageId       String   @map("stage_id") @db.Uuid
+  uploadId      String   @map("upload_id")
+  label         String
+  acceptedTypes Json     @default("[]") @map("accepted_types")
+  maxFiles      Int      @default(1) @map("max_files")
+  required      Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  stage Stage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@map("upload_definitions")
+}
+
+model Upload {
+  id               String   @id @default(uuid()) @db.Uuid
+  projectId        String   @map("project_id") @db.Uuid
+  uploaderId       String   @map("uploader_id") @db.Uuid
+  filePath         String   @map("file_path")
+  originalFilename String   @map("original_filename")
+  label            String?
+  remarks          String?
+  requiresReview   Boolean  @default(false) @map("requires_review")
+  category         String?
+  isActiveRendering Boolean @default(false) @map("is_active_rendering")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader User    @relation(fields: [uploaderId], references: [id])
+
+  @@index([projectId])
+  @@map("uploads")
+}
+
+model Toggle {
+  id               String   @id @default(uuid()) @db.Uuid
+  stageId          String   @map("stage_id") @db.Uuid
+  templateToggleId String?  @map("template_toggle_id")
+  label            String
+  value            Boolean  @default(false)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  stage Stage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@map("toggles")
+}
+
+model Invoice {
+  id          String    @id @default(uuid()) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  type        String    // 'estimate', 'deposit', 'balance', 'misc'
+  status      String    @default("pending") // 'pending', 'sent', 'paid', 'overdue', 'cancelled'
+  amount      Decimal   @db.Decimal(10, 2)
+  dueDate     DateTime? @map("due_date") @db.Date
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+model Message {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  content   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sender  User          @relation(fields: [senderId], references: [id])
+  reads   MessageRead[]
+
+  @@index([projectId])
+  @@map("messages")
+}
+
+model MessageRead {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  readAt    DateTime @default(now()) @map("read_at") @db.Timestamptz(6)
+
+  // Relations
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_reads")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  projectId String?  @map("project_id") @db.Uuid
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model Invite {
+  id             String    @id @default(uuid()) @db.Uuid
+  projectId      String    @map("project_id") @db.Uuid
+  invitedUserId  String    @map("invited_user_id") @db.Uuid
+  invitedById    String    @map("invited_by_id") @db.Uuid
+  role           String    // 'owner', 'staff', 'client'
+  status         String    @default("pending") // 'pending', 'accepted', 'declined'
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz(6)
+
+  // Relations
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedUser User    @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  invitedBy   User    @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([projectId])
+  @@index([invitedUserId])
+  @@map("invites")
+}
+
+model Template {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  stages      Json
+  stageCount  Int      @map("stage_count")
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("templates")
+}
