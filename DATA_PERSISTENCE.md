@@ -230,6 +230,24 @@ All data structures are already normalized and follow database-like patterns (ID
 
 ## Troubleshooting
 
+### "ENOENT: no such file or directory" on Render.com
+
+**Problem**: Error renaming temp files on Render.com deployment
+
+**Root Cause**: Render.com uses ephemeral storage - files don't persist
+
+**Solution**:
+1. Add a **Persistent Disk** on Render.com (see Production Deployment section above)
+2. Mount path: `/opt/render/project/src/server/data`
+3. Redeploy after adding disk
+
+**Alternative**: If you can't add persistent disk, set environment variable:
+```bash
+# On Render.com dashboard > Environment
+DATA_STORAGE_DISABLED=true
+```
+This will disable file persistence (data only in memory, lost on restart)
+
 ### "Data not saving"
 1. Check server logs for `[ERROR]` messages
 2. Verify `server/data/` directory exists
@@ -264,16 +282,38 @@ Use this to verify persistence works:
 
 ## Production Deployment
 
-### Render.com
-- ✅ Works with persistent disk ($7/month for 1GB)
-- Automatically backed up
-- Files survive deployments
+### Render.com - REQUIRES PERSISTENT DISK
+
+⚠️ **IMPORTANT**: Render.com uses **ephemeral storage** by default - all files are lost on restart!
+
+#### Setup Persistent Disk on Render.com:
+
+1. **Go to your Web Service** on Render.com dashboard
+2. **Click "Disks" tab** (left sidebar)
+3. **Add Disk**:
+   - Name: `data-storage`
+   - Mount Path: `/opt/render/project/src/server/data`
+   - Size: 1GB (free tier) or more
+4. **Deploy** - Render will restart with persistent storage
+
+#### Without Persistent Disk:
+- ❌ Data lost on every deployment
+- ❌ Data lost on server restart
+- ❌ `ENOENT` errors when trying to write files
+
+#### With Persistent Disk:
+- ✅ Data survives deployments
+- ✅ Data survives restarts
+- ✅ Automatically backed up by Render
+- ✅ No `ENOENT` errors
+
+**Cost**: Free tier includes 1GB persistent disk, or $7/month for more
 
 ### Netlify (Client Only)
 - N/A - client has no server-side data
 
-### Manual Server
-- ✅ Works perfectly
+### Manual Server (VPS/Dedicated)
+- ✅ Works perfectly out of the box
 - Set up cron jobs for backups
 - Monitor disk space
 

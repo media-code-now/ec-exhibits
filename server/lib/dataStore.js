@@ -5,13 +5,29 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Check if persistence is disabled (for platforms without persistent storage)
+const PERSISTENCE_DISABLED = process.env.DATA_STORAGE_DISABLED === 'true';
+
 // Data directory relative to server root
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log('[INFO] Created data directory:', DATA_DIR);
+// Ensure data directory exists (unless disabled)
+if (!PERSISTENCE_DISABLED) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      console.log('[INFO] Created data directory:', DATA_DIR);
+    }
+  } catch (error) {
+    console.error('[ERROR] Failed to create data directory:', error.message);
+    console.error('[WARN] Data persistence disabled - using memory only');
+    process.env.DATA_STORAGE_DISABLED = 'true';
+  }
+}
+
+if (PERSISTENCE_DISABLED) {
+  console.log('[WARN] Data persistence disabled - all data will be lost on restart');
+  console.log('[INFO] To enable persistence, ensure writable filesystem or add persistent disk');
 }
 
 /**
@@ -19,6 +35,11 @@ if (!fs.existsSync(DATA_DIR)) {
  * Uses temp file + rename to ensure data integrity
  */
 export function saveData(filename, data) {
+  // Skip if persistence disabled
+  if (process.env.DATA_STORAGE_DISABLED === 'true') {
+    return false;
+  }
+  
   try {
     // Ensure data directory exists
     if (!fs.existsSync(DATA_DIR)) {
@@ -75,9 +96,19 @@ export function loadData(filename) {
  * Good for frequent updates
  */
 export function saveDataAsync(filename, data) {
+  // Skip if persistence disabled
+  if (process.env.DATA_STORAGE_DISABLED === 'true') {
+    return;
+  }
+  
   // Ensure data directory exists before async operations
   if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    } catch (error) {
+      console.error(`[ERROR] Failed to create data directory for ${filename}:`, error.message);
+      return;
+    }
   }
   
   const filePath = path.join(DATA_DIR, filename);
