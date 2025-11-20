@@ -892,4 +892,98 @@ const PORT = process.env.PORT ?? 4000;
 httpServer.listen(PORT, () => {
   console.log(`Real-time server listening on http://localhost:${PORT}`);
   console.log('Demo users:', listUsers().map(u => `${u.displayName} (${u.id})`).join(', '));
+  
+  // Start overdue task checker (runs every hour)
+  startOverdueTaskChecker();
 });
+
+// Track which tasks we've already notified about to avoid spam
+const notifiedOverdueTasks = new Set();
+
+function checkOverdueTasks() {
+  const allProjects = projectStore.listForUser('user-owner'); // Get all projects
+  const now = Date.now();
+  
+  allProjects.forEach(project => {
+    const stages = stageStore.list(project.id);
+    const memberIds = project.members.map(m => m.userId);
+    
+    stages.forEach(stage => {
+      stage.tasks?.forEach(task => {
+        // Check if task is overdue and not completed
+        if (task.dueDate && task.state !== 'completed') {
+          const dueDate = new Date(task.dueDate);
+          if (!isNaN(dueDate.getTime()) && dueDate.getTime() < now) {
+            const taskKey = `${project.id}-${stage.id}-${task.id}`;
+            
+            // Only notify once per task (until it's completed or due date changes)
+            if (!notifiedOverdueTasks.has(taskKey)) {
+              notifiedOverdueTasks.add(taskKey);
+              
+              // Send notification to all project members
+              notificationStore.bumpProjectChange({
+                projectId: project.id,
+                projectName: project.name,
+                memberIds,
+                change: {
+                  type: 'task_overdue',
+                  taskTitle: task.title,
+                  stageName: stage.name,
+                  dueDate: task.dueDate
+                }
+              });
+              
+              // Emit real-time notifications
+              if (io) {
+                emitNotificationSummaries(memberIds);
+                io.to(project.id).emit('project:update', {
+                  projectId: project.id,
+                  stages: stageStore.list(project.id),
+                  progress: stageStore.projectProgress(project.id)
+                });
+              }
+              
+              console.log(`[OVERDUE] Task "${task.title}" in project "${project.name}" is overdue (due: ${dueDate.toLocaleDateString()})`);
+            }
+          }
+        }
+      });
+    });
+  });
+  
+  // Clean up notifications for tasks that are no longer overdue or have been completed
+  const currentOverdueTasks = new Set();
+  allProjects.forEach(project => {
+    const stages = stageStore.list(project.id);
+    stages.forEach(stage => {
+      stage.tasks?.forEach(task => {
+        if (task.isOverdue && task.state !== 'completed') {
+          currentOverdueTasks.add(`${project.id}-${stage.id}-${task.id}`);
+        }
+      });
+    });
+  });
+  
+  // Remove tasks that are no longer overdue from the notified set
+  notifiedOverdueTasks.forEach(taskKey => {
+    if (!currentOverdueTasks.has(taskKey)) {
+      notifiedOverdueTasks.delete(taskKey);
+    }
+  });
+}
+
+function startOverdueTaskChecker() {
+  // Check immediately on startup
+  setTimeout(() => {
+    console.log('[INFO] Running initial overdue task check...');
+    checkOverdueTasks();
+  }, 5000); // Wait 5 seconds after startup
+  
+  // Then check every hour
+  setInterval(() => {
+    console.log('[INFO] Running scheduled overdue task check...');
+    checkOverdueTasks();
+  }, 60 * 60 * 1000); // 1 hour
+  
+  console.log('[INFO] Overdue task checker started (runs every hour)');
+}

@@ -82,6 +82,10 @@ function formatProjectChange(change) {
   if (change.type === 'task_completed') {
     return `Task "${change.taskTitle}" completed in ${change.stageName}.`;
   }
+  if (change.type === 'task_overdue') {
+    const dueDate = change.dueDate ? new Date(change.dueDate).toLocaleDateString() : 'unknown';
+    return `Task "${change.taskTitle}" is overdue (was due ${dueDate}).`;
+  }
   if (change.type === 'client_upload') {
     const count = change.count ?? 1;
     const label = count === 1 ? 'a file' : `${count} files`;
