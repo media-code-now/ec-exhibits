@@ -9,6 +9,10 @@ const projectData = new Map([
     {
       id: 'proj-1',
       name: 'Flagship Exhibit Launch',
+      show: 'Tech Summit 2024',
+      size: '30x40 ft',
+      moveInDate: '2024-09-15',
+      openingDay: '2024-09-18',
       description: 'Main trade show build for Q3.',
       members: [
         { userId: 'user-owner', role: 'owner' },
@@ -23,6 +27,10 @@ const projectData = new Map([
     {
       id: 'proj-2',
       name: 'Regional Pop-up Booth',
+      show: 'Healthcare Expo 2024',
+      size: '10x10 ft',
+      moveInDate: '2024-10-01',
+      openingDay: '2024-10-03',
       description: 'Portable booth concept for regional tour.',
       members: [
         { userId: 'user-owner', role: 'owner' },
@@ -55,7 +63,7 @@ export const projectStore = {
     const project = projectData.get(projectId);
     return project ? [...project.members] : [];
   },
-  create({ name, description, ownerId, clientIds = [], staffIds = [] }) {
+  create({ name, show, size, moveInDate, openingDay, description, ownerId, clientIds = [], staffIds = [] }) {
     if (!name) throw new Error('Project name is required');
     const id = `proj-${randomUUID().slice(0, 8)}`;
     const members = new Map();
@@ -76,6 +84,10 @@ export const projectStore = {
     const project = {
       id,
       name,
+      show: show ?? '',
+      size: size ?? '',
+      moveInDate: moveInDate ?? '',
+      openingDay: openingDay ?? '',
       description: description ?? '',
       members: [...members.values()],
       createdAt: new Date().toISOString()

@@ -131,6 +131,10 @@ export function Dashboard({
 
   const [createForm, setCreateForm] = useState({
     name: '',
+    show: '',
+    size: '',
+    moveInDate: '',
+    openingDay: '',
     description: '',
     clientIds: [],
     staffIds: []
@@ -150,7 +154,7 @@ export function Dashboard({
     mutationFn: payload => axios.post('/projects', payload).then(({ data }) => data.project),
     onSuccess: newProject => {
       onProjectCreated?.(newProject);
-      setCreateForm({ name: '', description: '', clientIds: [], staffIds: [] });
+      setCreateForm({ name: '', show: '', size: '', moveInDate: '', openingDay: '', description: '', clientIds: [], staffIds: [] });
       setShowCreateProject(false);
       onProjectChange?.(newProject.id);
       queryClient.invalidateQueries(['stages', newProject.id]);
@@ -224,6 +228,10 @@ export function Dashboard({
     if (!createForm.name) return;
     createProjectMutation.mutate({
       name: createForm.name,
+      show: createForm.show,
+      size: createForm.size,
+      moveInDate: createForm.moveInDate,
+      openingDay: createForm.openingDay,
       description: createForm.description,
       clientIds: createForm.clientIds,
       staffIds: createForm.staffIds
@@ -623,6 +631,49 @@ export function Dashboard({
                           required
                         />
                       </label>
+                      
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="flex flex-col gap-2 text-sm text-slate-700">
+                          Show
+                          <input
+                            value={createForm.show}
+                            onChange={event => setCreateForm(prev => ({ ...prev, show: event.target.value }))}
+                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                            placeholder="e.g. CES 2025"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-2 text-sm text-slate-700">
+                          Size
+                          <input
+                            value={createForm.size}
+                            onChange={event => setCreateForm(prev => ({ ...prev, size: event.target.value }))}
+                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                            placeholder="e.g. 20x20 ft"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="flex flex-col gap-2 text-sm text-slate-700">
+                          Move-in Date
+                          <input
+                            type="date"
+                            value={createForm.moveInDate}
+                            onChange={event => setCreateForm(prev => ({ ...prev, moveInDate: event.target.value }))}
+                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-2 text-sm text-slate-700">
+                          Opening Day
+                          <input
+                            type="date"
+                            value={createForm.openingDay}
+                            onChange={event => setCreateForm(prev => ({ ...prev, openingDay: event.target.value }))}
+                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                          />
+                        </label>
+                      </div>
+
                       <label className="flex flex-col gap-2 text-sm text-slate-700">
                         Description
                         <textarea

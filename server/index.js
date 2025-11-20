@@ -226,9 +226,13 @@ app.post('/projects', (req, res) => {
     return res.status(403).json({ error: 'Only owners can create projects' });
   }
   try {
-    const { name, description, clientIds = [], staffIds = [] } = req.body ?? {};
+    const { name, show, size, moveInDate, openingDay, description, clientIds = [], staffIds = [] } = req.body ?? {};
     const project = projectStore.create({
       name,
+      show,
+      size,
+      moveInDate,
+      openingDay,
       description,
       ownerId: req.user.id,
       clientIds,
