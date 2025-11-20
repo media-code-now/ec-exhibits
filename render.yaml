@@ -5,7 +5,7 @@ services:
     plan: free
     repo: https://github.com/media-code-now/ec-exhibits
     branch: main
-    root: server
-    buildCommand: npm install
-    startCommand: npm run start
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm run start
     autoDeploy: true
+    rootDir: server

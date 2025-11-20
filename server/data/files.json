@@ -1,0 +1,54 @@
+{
+  "files": {
+    "file-1": {
+      "id": "file-1",
+      "projectId": "proj-1",
+      "category": "invoices-estimates",
+      "filename": "invoice_001.pdf",
+      "originalName": "Initial Project Invoice.pdf",
+      "mimetype": "application/pdf",
+      "size": 245760,
+      "uploadedBy": "user-owner",
+      "uploadedAt": "2025-11-17T08:25:33.242Z",
+      "label": "Project Setup Invoice",
+      "remarks": "Initial invoice for project setup and planning phase",
+      "addressed": false
+    },
+    "file-2": {
+      "id": "file-2",
+      "projectId": "proj-1",
+      "category": "production-files",
+      "filename": "blueprint_v1.dwg",
+      "originalName": "Exhibition Layout Blueprint v1.dwg",
+      "mimetype": "application/acad",
+      "size": 1024000,
+      "uploadedBy": "user-staff",
+      "uploadedAt": "2025-11-17T08:25:33.244Z",
+      "label": "Layout Blueprint v1",
+      "remarks": "Initial layout design - needs client approval",
+      "addressed": false
+    },
+    "file-3": {
+      "id": "file-3",
+      "projectId": "proj-1",
+      "category": "graphics",
+      "filename": "logo_brand.ai",
+      "originalName": "Company Logo Brand Guidelines.ai",
+      "mimetype": "application/illustrator",
+      "size": 512000,
+      "uploadedBy": "user-staff",
+      "uploadedAt": "2025-11-17T08:25:33.244Z",
+      "label": "Brand Guidelines",
+      "remarks": "Updated brand guidelines with new color scheme",
+      "addressed": true
+    }
+  },
+  "projectFiles": {
+    "proj-1": [
+      "file-1",
+      "file-2",
+      "file-3"
+    ]
+  },
+  "nextFileId": 4
+}}

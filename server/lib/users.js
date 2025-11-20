@@ -1,118 +1,35 @@
 import { randomUUID } from 'crypto';
-import bcrypt from 'bcryptjs';
-import { saveDataAsync, loadData } from './dataStore.js';
 
-const USERS_FILE = 'users.json';
-
-// Default password for all demo users: "password123"
-const defaultPasswordHash = bcrypt.hashSync('password123', 10);
-
-// Initial seed data
-const initialUsers = [
-  { 
-    id: 'user-owner', 
-    displayName: 'Olivia Owner', 
-    role: 'owner', 
-    email: 'olivia@ecexhibits.com',
-    passwordHash: defaultPasswordHash
-  },
-  { 
-    id: 'user-staff', 
-    displayName: 'Samuel Staff', 
-    role: 'staff', 
-    email: 'samuel@ecexhibits.com',
-    passwordHash: defaultPasswordHash
-  },
-  { 
-    id: 'user-staff-2', 
-    displayName: 'Skyler Staff', 
-    role: 'staff', 
-    email: 'skyler@ecexhibits.com',
-    passwordHash: defaultPasswordHash
-  },
-  { 
-    id: 'user-client', 
-    displayName: 'Cameron Client', 
-    role: 'client', 
-    email: 'cameron@client.com',
-    passwordHash: defaultPasswordHash
-  },
-  { 
-    id: 'user-client-2', 
-    displayName: 'Callie Client', 
-    role: 'client', 
-    email: 'callie@client.com',
-    passwordHash: defaultPasswordHash
-  }
+const userStore = [
+  { id: 'user-owner', displayName: 'Olivia Owner', role: 'owner', email: 'olivia.owner@example.com' },
+  { id: 'user-staff', displayName: 'Samuel Staff', role: 'staff', email: 'samuel.staff@example.com' },
+  { id: 'user-staff-2', displayName: 'Skyler Staff', role: 'staff', email: 'skyler.staff@example.com' },
+  { id: 'user-client', displayName: 'Cameron Client', role: 'client', email: 'cameron.client@example.com' },
+  { id: 'user-client-2', displayName: 'Callie Client', role: 'client', email: 'callie.client@example.com' }
 ];
-
-// Load users from disk or use seed data
-let userStore = [];
-const loadedData = loadData(USERS_FILE);
-if (loadedData && Array.isArray(loadedData)) {
-  userStore = loadedData;
-  console.log(`[INFO] Loaded ${userStore.length} users from disk`);
-} else {
-  userStore = [...initialUsers];
-  console.log('[INFO] Using seed user data');
-}
-
-// Helper to persist data to disk
-function persistUsers() {
-  saveDataAsync(USERS_FILE, userStore);
-}
 
 const allowedRoles = new Set(['owner', 'staff', 'client']);
 
 export function listUsers() {
-  return userStore.map(user => {
-    const { passwordHash, ...safeUser } = user;
-    return safeUser;
-  });
+  return userStore.map(user => ({ ...user }));
 }
 
 export function getUser(userId) {
-  const user = userStore.find(user => user.id === userId);
-  if (!user) return null;
-  const { passwordHash, ...safeUser } = user;
-  return safeUser;
+  return userStore.find(user => user.id === userId) ?? null;
 }
 
-export function getUserByEmail(email) {
-  const normalisedEmail = email.trim().toLowerCase();
-  return userStore.find(user => user.email.toLowerCase() === normalisedEmail) ?? null;
-}
-
-export function validatePassword(user, password) {
-  if (!user || !user.passwordHash) return false;
-  return bcrypt.compareSync(password, user.passwordHash);
-}
-
-export function addUser({ displayName, role, email, password }) {
+export function addUser({ displayName, role, email }) {
   if (!displayName) throw new Error('Display name is required');
   if (!email) throw new Error('Email is required');
-  if (!password) throw new Error('Password is required');
-  if (password.length < 6) throw new Error('Password must be at least 6 characters');
   if (!allowedRoles.has(role)) throw new Error('Invalid role');
-  
   const normalisedEmail = email.trim().toLowerCase();
   const existing = userStore.find(user => user.email.toLowerCase() === normalisedEmail);
   if (existing) throw new Error('Email already exists');
 
   const id = `user-${role}-${randomUUID().slice(0, 8)}`;
-  const passwordHash = bcrypt.hashSync(password, 10);
-  const user = { 
-    id, 
-    displayName: displayName.trim(), 
-    role, 
-    email: normalisedEmail,
-    passwordHash
-  };
+  const user = { id, displayName: displayName.trim(), role, email: normalisedEmail };
   userStore.push(user);
-  persistUsers(); // Save to disk
-  
-  const { passwordHash: _, ...safeUser } = user;
-  return safeUser;
+  return { ...user };
 }
 
 export function removeUser(userId) {
@@ -121,6 +38,5 @@ export function removeUser(userId) {
     throw new Error('User not found');
   }
   const [removed] = userStore.splice(index, 1);
-  persistUsers(); // Save to disk
   return { ...removed };
 }

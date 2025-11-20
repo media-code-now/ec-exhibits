@@ -7,7 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import { authMiddleware, issueToken } from './middleware/auth.js';
-import { getUser, listUsers, addUser, removeUser, getUserByEmail, validatePassword } from './lib/users.js';
+import { getUser, listUsers, addUser, removeUser } from './lib/users.js';
 import { emailService } from './lib/email.js';
 import { projectStore } from './stores/projectStore.js';
 import { stageStore, stageStatuses, taskStatuses } from './stores/stageStore.js';
@@ -16,7 +16,6 @@ import { invoiceStore } from './stores/invoiceStore.js';
 import { inviteStore } from './stores/inviteStore.js';
 import { messageStore } from './stores/messageStore.js';
 import { notificationStore } from './stores/notificationStore.js';
-import { fileStore, FILE_CATEGORIES, CATEGORY_LABELS } from './stores/fileStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,14 +67,17 @@ app.use((req, res, next) => {
     req.setEncoding('utf8');
     req.on('data', chunk => (raw += chunk));
     req.on('end', () => {
+      console.log('[DEBUG] /auth/token raw body:', raw);
       try {
         req.body = raw ? JSON.parse(raw) : {};
         next();
       } catch (err) {
+        console.error('[DEBUG] JSON parse error for /auth/token:', err, 'raw:', raw);
         return res.status(400).json({ error: 'Invalid JSON' });
       }
     });
     req.on('error', err => {
+      console.error('[DEBUG] req error on /auth/token:', err);
       return res.status(400).json({ error: 'Invalid request body' });
     });
   } else {
@@ -83,32 +85,7 @@ app.use((req, res, next) => {
   }
 });
 
-// Login endpoint with email and password
-app.post('/auth/login', (req, res) => {
-  const { email, password } = req.body ?? {};
-  
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-  
-  const user = getUserByEmail(email);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-  
-  const isValid = validatePassword(user, password);
-  if (!isValid) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-  
-  const { passwordHash, ...safeUser } = user;
-  const token = issueToken(safeUser);
-  
-  console.log(`[AUTH] User logged in: ${safeUser.email} (${safeUser.role})`);
-  return res.json({ token, user: safeUser });
-});
-
-// Demo endpoint to get tokens for mock users (deprecated, kept for backward compatibility)
+// Demo endpoint to get tokens for mock users
 app.post('/auth/token', (req, res) => {
   const { userId } = req.body ?? {};
   const user = getUser(userId);
@@ -132,8 +109,8 @@ app.post('/users', (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const { displayName, role, email, password } = req.body ?? {};
-    const user = addUser({ displayName, role, email, password: password || 'password123' });
+    const { displayName, role, email } = req.body ?? {};
+    const user = addUser({ displayName, role, email });
     const ownerRecipients = listUsers()
       .filter(candidate => candidate.role === 'owner' && candidate.id !== req.user.id)
       .map(candidate => candidate.id);
@@ -241,497 +218,6 @@ app.put('/template/stages', (req, res) => {
     res.json({ template: { stages: template } });
   } catch (error) {
     res.status(400).json({ error: error.message });
-  }
-});
-
-// Endpoint to refresh all project stages with the current template
-app.post('/template/refresh-projects', (req, res) => {
-  if (req.user.role !== 'owner') {
-    return res.status(403).json({ error: 'Only owners can refresh project templates' });
-  }
-  try {
-    const projectIds = stageStore.refreshAllProjectStages();
-    console.log(`[INFO] Refreshed stages for ${projectIds.length} project(s)`);
-    res.json({ 
-      success: true, 
-      message: `Refreshed stages for ${projectIds.length} project(s)`,
-      projectIds 
-    });
-  } catch (error) {
-    console.error('[ERROR] Failed to refresh project stages:', error.message);
-    res.status(500).json({ error: 'Failed to refresh project stages' });
-  }
-});
-
-// Saved templates endpoints
-app.get('/template/saved', (req, res) => {
-  // Get the current default template to use for Standard Project Template
-  const currentTemplate = stageStore.getTemplateDefinition();
-  
-  const savedTemplates = [
-    {
-      id: 1,
-      name: "Standard Project Template",
-      description: "Default template for standard projects",
-      createdAt: "2024-10-25T10:00:00Z",
-      stagesCount: currentTemplate.length,
-      stages: currentTemplate // Use the current default template
-    },
-    {
-      id: 2,
-      name: "Quick Setup Template",
-      description: "Simplified template for fast projects - Invoices, Graphics, Furniture",
-      createdAt: "2024-10-20T15:30:00Z",
-      stagesCount: 3,
-      stages: [
-        {
-          slug: 'invoices-payments',
-          name: 'Invoices & Payments',
-          description: 'Handle project invoicing and payment processing',
-          defaultStageDueInDays: 7,
-          permissions: {
-            viewRoles: ['owner', 'staff', 'client'],
-            taskUpdateRoles: ['owner', 'staff'],
-            checklistEditRoles: ['owner', 'staff'],
-            clientCanUpload: false
-          },
-          tasks: [
-            {
-              slug: 'create-invoice',
-              title: 'Create Project Invoice',
-              ownerRole: 'staff',
-              defaultDueInDays: 3,
-              requiresClientInput: false,
-              requiredUploadIds: []
-            },
-            {
-              slug: 'process-payment',
-              title: 'Process Payment',
-              ownerRole: 'staff',
-              defaultDueInDays: 7,
-              requiresClientInput: true,
-              requiredUploadIds: []
-            }
-          ],
-          uploads: [
-            {
-              uploadId: 'invoice-docs',
-              label: 'Invoice Documents',
-              acceptedTypes: ['pdf', 'docx'],
-              acceptedTypesText: 'pdf, docx',
-              maxFiles: 3,
-              required: true
-            }
-          ],
-          toggles: [
-            {
-              slug: 'payment-received',
-              label: 'Payment Received',
-              defaultValue: false
-            }
-          ]
-        },
-        {
-          slug: 'graphics-branding',
-          name: 'Graphics & Branding',
-          description: 'Design and branding materials creation',
-          defaultStageDueInDays: 14,
-          permissions: {
-            viewRoles: ['owner', 'staff', 'client'],
-            taskUpdateRoles: ['owner', 'staff'],
-            checklistEditRoles: ['owner', 'staff'],
-            clientCanUpload: true
-          },
-          tasks: [
-            {
-              slug: 'create-brand-guide',
-              title: 'Create Brand Guidelines',
-              ownerRole: 'staff',
-              defaultDueInDays: 7,
-              requiresClientInput: false,
-              requiredUploadIds: []
-            },
-            {
-              slug: 'design-graphics',
-              title: 'Design Graphics Assets',
-              ownerRole: 'staff',
-              defaultDueInDays: 10,
-              requiresClientInput: true,
-              requiredUploadIds: ['brand-assets']
-            }
-          ],
-          uploads: [
-            {
-              uploadId: 'brand-assets',
-              label: 'Brand Assets',
-              acceptedTypes: ['png', 'jpg', 'svg', 'ai', 'psd'],
-              acceptedTypesText: 'png, jpg, svg, ai, psd',
-              maxFiles: 10,
-              required: true
-            },
-            {
-              uploadId: 'final-graphics',
-              label: 'Final Graphics',
-              acceptedTypes: ['png', 'jpg', 'svg', 'pdf'],
-              acceptedTypesText: 'png, jpg, svg, pdf',
-              maxFiles: 20,
-              required: false
-            }
-          ],
-          toggles: [
-            {
-              slug: 'brand-approved',
-              label: 'Brand Guidelines Approved',
-              defaultValue: false
-            },
-            {
-              slug: 'graphics-approved',
-              label: 'Graphics Approved by Client',
-              defaultValue: false
-            }
-          ]
-        },
-        {
-          slug: 'furniture-equipment',
-          name: 'Furniture & Equipment',
-          description: 'Furniture selection and equipment procurement',
-          defaultStageDueInDays: 21,
-          permissions: {
-            viewRoles: ['owner', 'staff', 'client'],
-            taskUpdateRoles: ['owner', 'staff'],
-            checklistEditRoles: ['owner', 'staff'],
-            clientCanUpload: true
-          },
-          tasks: [
-            {
-              slug: 'furniture-selection',
-              title: 'Select Furniture Items',
-              ownerRole: 'staff',
-              defaultDueInDays: 10,
-              requiresClientInput: true,
-              requiredUploadIds: []
-            },
-            {
-              slug: 'equipment-procurement',
-              title: 'Procure Equipment',
-              ownerRole: 'staff',
-              defaultDueInDays: 14,
-              requiresClientInput: false,
-              requiredUploadIds: ['equipment-specs']
-            },
-            {
-              slug: 'delivery-coordination',
-              title: 'Coordinate Delivery',
-              ownerRole: 'staff',
-              defaultDueInDays: 21,
-              requiresClientInput: true,
-              requiredUploadIds: []
-            }
-          ],
-          uploads: [
-            {
-              uploadId: 'furniture-specs',
-              label: 'Furniture Specifications',
-              acceptedTypes: ['pdf', 'docx', 'xlsx'],
-              acceptedTypesText: 'pdf, docx, xlsx',
-              maxFiles: 5,
-              required: true
-            },
-            {
-              uploadId: 'equipment-specs',
-              label: 'Equipment Specifications',
-              acceptedTypes: ['pdf', 'docx', 'xlsx'],
-              acceptedTypesText: 'pdf, docx, xlsx',
-              maxFiles: 5,
-              required: true
-            }
-          ],
-          toggles: [
-            {
-              slug: 'furniture-ordered',
-              label: 'Furniture Ordered',
-              defaultValue: false
-            },
-            {
-              slug: 'equipment-ordered',
-              label: 'Equipment Ordered',
-              defaultValue: false
-            },
-            {
-              slug: 'delivery-scheduled',
-              label: 'Delivery Scheduled',
-              defaultValue: false
-            }
-          ]
-        }
-      ]
-    },
-    {
-      id: 3,
-      name: "Complex Project Template",
-      description: "Comprehensive template for large projects",
-      createdAt: "2024-10-15T09:15:00Z",
-      stagesCount: 8,
-      stages: currentTemplate // Also use current template as base for complex projects
-    }
-  ];
-  
-  res.json({ templates: savedTemplates });
-});
-
-app.get('/template/saved/:id', (req, res) => {
-  const { id } = req.params;
-  const currentTemplate = stageStore.getTemplateDefinition();
-  
-  const savedTemplates = {
-    1: {
-      id: 1,
-      name: "Standard Project Template",
-      description: "Default template for standard projects",
-      createdAt: "2024-10-25T10:00:00Z",
-      stagesCount: currentTemplate.length,
-      stages: currentTemplate // Use the current default template
-    },
-    2: {
-      id: 2,
-      name: "Quick Setup Template",
-      description: "Simplified template for fast projects - Invoices, Graphics, Furniture",
-      createdAt: "2024-10-20T15:30:00Z",
-      stagesCount: 3,
-      stages: [
-        {
-          slug: 'invoices-payments',
-          name: 'Invoices & Payments',
-          description: 'Handle project invoicing and payment processing',
-          defaultStageDueInDays: 7,
-          permissions: {
-            viewRoles: ['owner', 'staff', 'client'],
-            taskUpdateRoles: ['owner', 'staff'],
-            checklistEditRoles: ['owner', 'staff'],
-            clientCanUpload: false
-          },
-          tasks: [
-            {
-              slug: 'create-invoice',
-              title: 'Create Project Invoice',
-              ownerRole: 'staff',
-              defaultDueInDays: 3,
-              requiresClientInput: false,
-              requiredUploadIds: []
-            },
-            {
-              slug: 'process-payment',
-              title: 'Process Payment',
-              ownerRole: 'staff',
-              defaultDueInDays: 7,
-              requiresClientInput: true,
-              requiredUploadIds: []
-            }
-          ],
-          uploads: [
-            {
-              uploadId: 'invoice-docs',
-              label: 'Invoice Documents',
-              acceptedTypes: ['pdf', 'docx'],
-              acceptedTypesText: 'pdf, docx',
-              maxFiles: 3,
-              required: true
-            }
-          ],
-          toggles: [
-            {
-              slug: 'payment-received',
-              label: 'Payment Received',
-              defaultValue: false
-            }
-          ]
-        },
-        {
-          slug: 'graphics-branding',
-          name: 'Graphics & Branding',
-          description: 'Design and branding materials creation',
-          defaultStageDueInDays: 14,
-          permissions: {
-            viewRoles: ['owner', 'staff', 'client'],
-            taskUpdateRoles: ['owner', 'staff'],
-            checklistEditRoles: ['owner', 'staff'],
-            clientCanUpload: true
-          },
-          tasks: [
-            {
-              slug: 'create-brand-guide',
-              title: 'Create Brand Guidelines',
-              ownerRole: 'staff',
-              defaultDueInDays: 7,
-              requiresClientInput: false,
-              requiredUploadIds: []
-            },
-            {
-              slug: 'design-graphics',
-              title: 'Design Graphics Assets',
-              ownerRole: 'staff',
-              defaultDueInDays: 10,
-              requiresClientInput: true,
-              requiredUploadIds: ['brand-assets']
-            }
-          ],
-          uploads: [
-            {
-              uploadId: 'brand-assets',
-              label: 'Brand Assets',
-              acceptedTypes: ['png', 'jpg', 'svg', 'ai', 'psd'],
-              acceptedTypesText: 'png, jpg, svg, ai, psd',
-              maxFiles: 10,
-              required: true
-            },
-            {
-              uploadId: 'final-graphics',
-              label: 'Final Graphics',
-              acceptedTypes: ['png', 'jpg', 'svg', 'pdf'],
-              acceptedTypesText: 'png, jpg, svg, pdf',
-              maxFiles: 20,
-              required: false
-            }
-          ],
-          toggles: [
-            {
-              slug: 'brand-approved',
-              label: 'Brand Guidelines Approved',
-              defaultValue: false
-            },
-            {
-              slug: 'graphics-approved',
-              label: 'Graphics Approved by Client',
-              defaultValue: false
-            }
-          ]
-        },
-        {
-          slug: 'furniture-equipment',
-          name: 'Furniture & Equipment',
-          description: 'Furniture selection and equipment procurement',
-          defaultStageDueInDays: 21,
-          permissions: {
-            viewRoles: ['owner', 'staff', 'client'],
-            taskUpdateRoles: ['owner', 'staff'],
-            checklistEditRoles: ['owner', 'staff'],
-            clientCanUpload: true
-          },
-          tasks: [
-            {
-              slug: 'furniture-selection',
-              title: 'Select Furniture Items',
-              ownerRole: 'staff',
-              defaultDueInDays: 10,
-              requiresClientInput: true,
-              requiredUploadIds: []
-            },
-            {
-              slug: 'equipment-procurement',
-              title: 'Procure Equipment',
-              ownerRole: 'staff',
-              defaultDueInDays: 14,
-              requiresClientInput: false,
-              requiredUploadIds: ['equipment-specs']
-            },
-            {
-              slug: 'delivery-coordination',
-              title: 'Coordinate Delivery',
-              ownerRole: 'staff',
-              defaultDueInDays: 21,
-              requiresClientInput: true,
-              requiredUploadIds: []
-            }
-          ],
-          uploads: [
-            {
-              uploadId: 'furniture-specs',
-              label: 'Furniture Specifications',
-              acceptedTypes: ['pdf', 'docx', 'xlsx'],
-              acceptedTypesText: 'pdf, docx, xlsx',
-              maxFiles: 5,
-              required: true
-            },
-            {
-              uploadId: 'equipment-specs',
-              label: 'Equipment Specifications',
-              acceptedTypes: ['pdf', 'docx', 'xlsx'],
-              acceptedTypesText: 'pdf, docx, xlsx',
-              maxFiles: 5,
-              required: true
-            }
-          ],
-          toggles: [
-            {
-              slug: 'furniture-ordered',
-              label: 'Furniture Ordered',
-              defaultValue: false
-            },
-            {
-              slug: 'equipment-ordered',
-              label: 'Equipment Ordered',
-              defaultValue: false
-            },
-            {
-              slug: 'delivery-scheduled',
-              label: 'Delivery Scheduled',
-              defaultValue: false
-            }
-          ]
-        }
-      ]
-    },
-    3: {
-      id: 3,
-      name: "Complex Project Template",
-      description: "Comprehensive template for large projects",
-      createdAt: "2024-10-15T09:15:00Z",
-      stagesCount: 8,
-      stages: currentTemplate // Use current template as base
-    }
-  };
-  
-  const template = savedTemplates[parseInt(id)];
-  if (!template) {
-    return res.status(404).json({ error: 'Template not found' });
-  }
-  
-  res.json({ template });
-});
-
-// POST endpoint to save a new template
-app.post('/template/saved', (req, res) => {
-  try {
-    const { name, stages } = req.body;
-    
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Template name is required' });
-    }
-    
-    if (!stages || !Array.isArray(stages) || stages.length === 0) {
-      return res.status(400).json({ error: 'Template must have at least one stage' });
-    }
-    
-    // In a real implementation, you would save this to a database
-    // For now, we'll just return success
-    const newTemplate = {
-      id: Date.now(), // Generate a temporary ID
-      name: name.trim(),
-      description: `Custom template: ${name.trim()}`,
-      createdAt: new Date().toISOString(),
-      stagesCount: stages.length,
-      stages: stages
-    };
-    
-    console.log(`[INFO] Template saved: "${newTemplate.name}" with ${stages.length} stages`);
-    res.status(201).json({ 
-      success: true, 
-      message: 'Template saved successfully',
-      template: newTemplate
-    });
-  } catch (error) {
-    console.error('[ERROR] Failed to save template:', error.message);
-    res.status(500).json({ error: 'Failed to save template' });
   }
 });
 
@@ -1210,60 +696,11 @@ function ensureUploadBucket(projectId) {
   return uploadsByProject.get(projectId);
 }
 
-// File upload configuration with limits
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadDir),
-  filename: (_, file, cb) => {
-    // Sanitize filename to prevent path traversal
-    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    cb(null, `${Date.now()}-${sanitizedName}`);
-  }
+  filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
 });
-
-// Allowed file types
-const allowedMimeTypes = [
-  // Documents
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain',
-  'text/csv',
-  // Images
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/svg+xml',
-  // Archives
-  'application/zip',
-  'application/x-zip-compressed',
-  'application/x-rar-compressed',
-  // Design files
-  'application/postscript', // .ai files
-  'image/vnd.adobe.photoshop', // .psd files
-];
-
-const fileFilter = (req, file, cb) => {
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type not allowed: ${file.mimetype}. Allowed types: PDF, Word, Excel, PowerPoint, images, ZIP, AI, PSD`), false);
-  }
-};
-
-const upload = multer({ 
-  storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max file size
-    files: 10 // Maximum 10 files per request
-  },
-  fileFilter
-});
+const upload = multer({ storage });
 
 app.get('/projects/:projectId/uploads', (req, res) => {
   const { projectId } = req.params;
@@ -1284,10 +721,6 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
   const members = project.members.map(member => member.userId);
   if (!members.includes(req.user.id)) {
     return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  if (!req.files || req.files.length === 0) {
-    return res.status(400).json({ error: 'No files uploaded' });
   }
 
   const meta = JSON.parse(req.body.meta ?? '[]');
@@ -1345,222 +778,6 @@ app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {
   res.json({ uploaded: entries });
 });
 
-// Files tab management endpoints
-app.get('/projects/:projectId/files', (req, res) => {
-  const { projectId } = req.params;
-  const { category } = req.query;
-  
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  try {
-    if (category && category !== 'all') {
-      const files = fileStore.getProjectFiles(projectId, category);
-      res.json({ files, category });
-    } else {
-      const filesByCategory = fileStore.getProjectFilesByCategory(projectId);
-      res.json({ 
-        filesByCategory, 
-        categories: CATEGORY_LABELS,
-        stats: fileStore.getProjectFileStats(projectId)
-      });
-    }
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post('/projects/:projectId/files/:category', upload.array('files'), (req, res) => {
-  const { projectId, category } = req.params;
-  
-  if (!Object.values(FILE_CATEGORIES).includes(category)) {
-    return res.status(400).json({ error: `Invalid category: ${category}` });
-  }
-
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  try {
-    const meta = JSON.parse(req.body.meta ?? '[]');
-    const uploadedFiles = req.files.map((file, index) => {
-      return fileStore.uploadFile({
-        projectId,
-        category,
-        filename: file.filename,
-        originalName: file.originalname,
-        mimetype: file.mimetype,
-        size: file.size,
-        uploadedBy: req.user.id,
-        label: meta[index]?.label ?? '',
-        remarks: meta[index]?.remarks ?? ''
-      });
-    });
-
-    // Send notifications
-    notificationStore.bumpUploads({
-      projectId,
-      projectName: project.name,
-      actorId: req.user.id,
-      actorName: req.user.displayName,
-      memberIds: members,
-      count: uploadedFiles.length,
-      fileNames: uploadedFiles.map(f => f.originalName)
-    });
-
-    if (req.user.role === 'client') {
-      notificationStore.bumpProjectChange({
-        projectId,
-        projectName: project.name,
-        actorId: req.user.id,
-        actorName: req.user.displayName,
-        memberIds: members,
-        change: {
-          type: 'client_upload',
-          category: CATEGORY_LABELS[category],
-          count: uploadedFiles.length,
-          fileNames: uploadedFiles.map(f => f.originalName)
-        }
-      });
-    }
-
-    const recipients = members.filter(id => id !== req.user.id);
-    if (recipients.length > 0) {
-      emitNotificationSummaries(recipients);
-    }
-    emitNotificationSummary(req.user.id);
-
-    res.json({ uploaded: uploadedFiles });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.patch('/projects/:projectId/files/:fileId', (req, res) => {
-  const { projectId, fileId } = req.params;
-  const { label, remarks, addressed } = req.body ?? {};
-
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  try {
-    const file = fileStore.getFile(fileId);
-    if (!file || file.projectId !== projectId) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const updates = {};
-    if (label !== undefined) updates.label = label;
-    if (remarks !== undefined) updates.remarks = remarks;
-    if (addressed !== undefined) updates.addressed = Boolean(addressed);
-
-    const updatedFile = fileStore.updateFile(fileId, updates);
-
-    // Notify about addressed status change
-    if (addressed !== undefined && addressed !== file.addressed) {
-      notificationStore.bumpProjectChange({
-        projectId,
-        projectName: project.name,
-        actorId: req.user.id,
-        actorName: req.user.displayName,
-        memberIds: members,
-        change: {
-          type: 'file_addressed',
-          fileName: file.originalName,
-          addressed: Boolean(addressed)
-        }
-      });
-
-      const recipients = members.filter(id => id !== req.user.id);
-      if (recipients.length > 0) {
-        emitNotificationSummaries(recipients);
-      }
-      emitNotificationSummary(req.user.id);
-    }
-
-    res.json({ file: updatedFile });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.delete('/projects/:projectId/files/:fileId', (req, res) => {
-  const { projectId, fileId } = req.params;
-
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can delete files' });
-  }
-
-  try {
-    const file = fileStore.getFile(fileId);
-    if (!file || file.projectId !== projectId) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const deletedFile = fileStore.deleteFile(fileId);
-
-    // Delete actual file from disk
-    const filePath = path.join(uploadDir, file.filename);
-    try {
-      fs.unlinkSync(filePath);
-    } catch (err) {
-      console.warn(`Could not delete file from disk: ${filePath}`, err);
-    }
-
-    res.json({ deleted: deletedFile });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.get('/projects/:projectId/files/:fileId/download', (req, res) => {
-  const { projectId, fileId } = req.params;
-
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  try {
-    const file = fileStore.getFile(fileId);
-    if (!file || file.projectId !== projectId) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const filePath = path.join(uploadDir, file.filename);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found on disk' });
-    }
-
-    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
-    res.setHeader('Content-Type', file.mimetype);
-    res.sendFile(path.resolve(filePath));
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
 app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
   const { projectId, uploadId } = req.params;
   const project = projectStore.get(projectId);
@@ -1587,7 +804,7 @@ app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
     res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
     res.download(absolutePath, record.fileName, err => {
       if (err) {
-        console.error('[ERROR] File download stream error:', err.message);
+        console.error('Download error', err);
         if (!res.headersSent) {
           res.status(500).json({ error: 'Unable to download file' });
         } else {
@@ -1596,44 +813,9 @@ app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[ERROR] File download failed:', error.message);
+    console.error('Download error', error);
     res.status(404).json({ error: 'File not found' });
   }
-});
-
-// Global error handler for multer and other errors
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ 
-        error: 'File too large. Maximum file size is 10MB.' 
-      });
-    }
-    if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ 
-        error: 'Too many files. Maximum 10 files per upload.' 
-      });
-    }
-    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-      return res.status(400).json({ 
-        error: 'Unexpected field in upload.' 
-      });
-    }
-    return res.status(400).json({ 
-      error: `Upload error: ${err.message}` 
-    });
-  }
-  
-  if (err.message && err.message.includes('File type not allowed')) {
-    return res.status(400).json({ 
-      error: err.message 
-    });
-  }
-  
-  console.error('[ERROR] Unhandled error:', err.message);
-  res.status(500).json({ 
-    error: 'An error occurred processing your request.' 
-  });
 });
 
 const httpServer = http.createServer(app);

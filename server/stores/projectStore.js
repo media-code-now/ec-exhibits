@@ -2,12 +2,8 @@ import { randomUUID } from 'crypto';
 import { getUser } from '../lib/users.js';
 import { stageStore } from './stageStore.js';
 import { invoiceStore } from './invoiceStore.js';
-import { saveDataAsync, loadData, mapToObject, objectToMap } from '../lib/dataStore.js';
 
-const PROJECTS_FILE = 'projects.json';
-
-// Initial seed data
-const initialProjects = new Map([
+const projectData = new Map([
   [
     'proj-1',
     {
@@ -37,22 +33,6 @@ const initialProjects = new Map([
     }
   ]
 ]);
-
-// Load projects from disk or use seed data
-let projectData = new Map();
-const loadedData = loadData(PROJECTS_FILE);
-if (loadedData) {
-  projectData = objectToMap(loadedData);
-  console.log(`[INFO] Loaded ${projectData.size} projects from disk`);
-} else {
-  projectData = new Map(initialProjects);
-  console.log('[INFO] Using seed project data');
-}
-
-// Helper to persist data to disk
-function persistProjects() {
-  saveDataAsync(PROJECTS_FILE, mapToObject(projectData));
-}
 
 function serialise(project) {
   return {
@@ -101,7 +81,6 @@ export const projectStore = {
       createdAt: new Date().toISOString()
     };
     projectData.set(id, project);
-    persistProjects(); // Save to disk
     stageStore.seedProjectStages(id);
     invoiceStore.seedProjectInvoices(id);
     return serialise(project);
@@ -116,7 +95,6 @@ export const projectStore = {
     if (!exists) {
       project.members.push({ userId, role });
     }
-    persistProjects(); // Save to disk
     return serialise(project);
   },
   removeMember({ projectId, userId }) {
@@ -128,7 +106,6 @@ export const projectStore = {
       throw new Error('Cannot remove an owner from the project');
     }
     project.members = project.members.filter(candidate => candidate.userId !== userId);
-    persistProjects(); // Save to disk
     return serialise(project);
   },
   removeUserFromAllProjects(userId) {
@@ -148,9 +125,6 @@ export const projectStore = {
         project: serialise(project)
       });
     });
-    if (affected.length > 0) {
-      persistProjects(); // Save to disk
-    }
     return affected;
   }
 };

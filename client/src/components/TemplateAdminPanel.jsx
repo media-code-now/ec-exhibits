@@ -57,7 +57,6 @@ export function TemplateAdminPanel({ canEdit }) {
 
   const templateStages = data?.template?.stages ?? [];
   const [draftStages, setDraftStages] = useState([]);
-  const [newTemplateName, setNewTemplateName] = useState('');
 
   useEffect(() => {
     setDraftStages(
@@ -78,17 +77,6 @@ export function TemplateAdminPanel({ canEdit }) {
     mutationFn: payload => axios.put('/template/stages', payload).then(({ data: response }) => response),
     onSuccess: () => {
       queryClient.invalidateQueries(['template-stages']);
-    }
-  });
-
-  const saveAsTemplateMutation = useMutation({
-    mutationFn: async ({ name, stages }) => {
-      const response = await axios.post('/template/saved', { name, stages });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['saved-templates']);
-      setNewTemplateName('');
     }
   });
 
@@ -239,16 +227,6 @@ export function TemplateAdminPanel({ canEdit }) {
     updateTemplateMutation.mutate({ stages: preparedStages });
   };
 
-  const handleSaveAsTemplate = event => {
-    event.preventDefault();
-    if (!canEdit || !newTemplateName.trim()) return;
-    if (!window.confirm(`Save current configuration as "${newTemplateName.trim()}"?`)) return;
-    saveAsTemplateMutation.mutate({ 
-      name: newTemplateName.trim(), 
-      stages: preparedStages 
-    });
-  };
-
   return (
     <section className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -300,53 +278,6 @@ export function TemplateAdminPanel({ canEdit }) {
           {error?.message ?? 'Unable to load template.'}
         </div>
       )}
-
-      {/* Save As New Template Section */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900 mb-2">Save Current Configuration as New Template</h3>
-        <p className="text-sm text-slate-600 mb-4">
-          Create a saved template from the current stage configuration to reuse later.
-        </p>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[240px]">
-            <label htmlFor="template-name" className="block text-sm font-medium text-slate-700 mb-1.5">
-              Template Name
-            </label>
-            <input
-              id="template-name"
-              type="text"
-              value={newTemplateName}
-              onChange={e => setNewTemplateName(e.target.value)}
-              placeholder="e.g., Standard 5-Stage Project"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-              disabled={!canEdit || saveAsTemplateMutation.isPending}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={handleSaveAsTemplate}
-            className={clsx(
-              'rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition',
-              canEdit && newTemplateName.trim() && !saveAsTemplateMutation.isPending
-                ? 'bg-blue-600 hover:bg-blue-500'
-                : 'bg-slate-400 cursor-not-allowed'
-            )}
-            disabled={!canEdit || !newTemplateName.trim() || saveAsTemplateMutation.isPending}
-          >
-            {saveAsTemplateMutation.isPending ? 'Saving…' : 'Save As Template'}
-          </button>
-        </div>
-        {saveAsTemplateMutation.isSuccess && (
-          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            ✓ Template saved successfully!
-          </div>
-        )}
-        {saveAsTemplateMutation.error && (
-          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {saveAsTemplateMutation.error?.response?.data?.error ?? 'Unable to save template.'}
-          </div>
-        )}
-      </section>
 
       {isLoading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
