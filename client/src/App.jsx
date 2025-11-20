@@ -3,7 +3,8 @@ import axios from 'axios';
 import { Dashboard } from './components/Dashboard.jsx';
 import logoMark from './assets/exhibit-control-logo.svg';
 
-axios.defaults.baseURL = 'http://localhost:4000';
+// Use environment variable for API URL, fallback to localhost for development
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const demoUsers = [
   { id: 'user-owner', label: 'Olivia Owner' },
