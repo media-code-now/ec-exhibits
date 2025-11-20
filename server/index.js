@@ -632,6 +632,9 @@ app.delete('/templates/:id', authRequired, (req, res) => {
   }
 });
 
+// DISABLED: Duplicate POST /projects endpoint using in-memory store
+// The database version at line 305 should be used instead
+/*
 app.post('/projects', (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Only owners can create projects' });
@@ -717,6 +720,7 @@ app.post('/projects', (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+*/
 
 app.post('/projects/:projectId/invite', (req, res) => {
   const { projectId } = req.params;
@@ -1359,7 +1363,7 @@ app.get('/projects/:projectId/uploads', authRequired, async (req, res) => {
         uploads: {
           orderBy: { createdAt: 'desc' },
           include: {
-            user: {
+            uploader: {
               select: {
                 id: true,
                 email: true,
