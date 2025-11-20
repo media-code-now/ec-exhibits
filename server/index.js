@@ -62,6 +62,14 @@ app.use(cors({ origin: corsOriginHandler, credentials: true }));
 // Cookie parser middleware for reading/setting cookies
 app.use(cookieParser());
 
+// Debug middleware to log cookies on all requests
+app.use((req, res, next) => {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/template')) {
+    console.log(`[COOKIE DEBUG] ${req.method} ${req.path} - Cookies:`, Object.keys(req.cookies).length > 0 ? req.cookies : 'NONE');
+  }
+  next();
+});
+
 // Log effective origin configuration for debugging
 console.log('[INFO] Allowed origin (dev):', ALLOWED_ORIGIN);
 console.log('[INFO] Allowed origin (prod):', PROD_ORIGIN);
@@ -163,14 +171,18 @@ app.post('/auth/login', async (req, res) => {
     );
 
     // 4. Send JWT as HTTP-only cookie
-    res.cookie('token', token, {
+    const cookieOptions = {
       httpOnly: true,        // Cannot be accessed by client-side JavaScript
       secure: process.env.NODE_ENV === 'production', // HTTPS only in production
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-site (Netlify -> Render)
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-    });
-
+    };
+    
+    res.cookie('token', token, cookieOptions);
+    
     console.log('[INFO] User logged in:', user.email);
+    console.log('[INFO] Cookie set with options:', cookieOptions);
+    console.log('[INFO] Token length:', token.length);
 
     // 5. Return user data (without password_hash)
     res.json({ 
@@ -436,10 +448,10 @@ app.get('/db/test', async (req, res) => {
   }
 });
 
-// Protect everything below
-app.use(authMiddleware.http);
+// NOTE: We use authRequired middleware on individual routes that need authentication
+// The old authMiddleware.http is NOT used anymore (it expects Authorization header, not cookies)
 
-app.get('/users', (req, res) => {
+app.get('/users', authRequired, (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -820,65 +832,113 @@ app.delete('/projects/:projectId/members/:memberId', (req, res) => {
   }
 });
 
-app.get('/projects/:projectId/stages', (req, res) => {
-  const { projectId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
+app.get('/projects/:projectId/stages', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    // Get project with stages from database
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        stages: {
+          orderBy: { position: 'asc' },
+          include: {
+            tasks: {
+              orderBy: { position: 'asc' }
+            },
+            uploadDefinitions: true,
+            toggles: true
+          }
+        },
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is a member
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    // Calculate progress
+    const totalStages = project.stages.length;
+    const completedStages = project.stages.filter(s => s.status === 'completed').length;
+    const inProgressStages = project.stages.filter(s => s.status === 'in_progress').length;
+    
+    const progress = {
+      total: totalStages,
+      completed: completedStages,
+      inProgress: inProgressStages,
+      percentage: totalStages > 0 ? Math.round((completedStages / totalStages) * 100) : 0
+    };
+    
+    res.json({ 
+      stages: project.stages, 
+      statuses: stageStatuses, 
+      taskStatuses, 
+      progress 
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to fetch stages:', error);
+    res.status(500).json({ error: 'Failed to fetch stages' });
   }
-  const stages = stageStore.list(projectId);
-  const progress = stageStore.projectProgress(projectId);
-  res.json({ stages, statuses: stageStatuses, taskStatuses, progress });
 });
 
-app.post('/projects/:projectId/apply-template', (req, res) => {
+app.post('/projects/:projectId/apply-template', authRequired, async (req, res) => {
   const { projectId } = req.params;
   const { templateId } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
   
-  const member = project.members.find(item => item.userId === req.user.id);
+  // Check if project exists in database
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      members: {
+        include: {
+          user: true
+        }
+      }
+    }
+  });
+  
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  
+  // Check if user is a member with owner or staff role
+  const member = project.members.find(m => m.userId === req.user.id);
   if (!member || (member.role !== 'owner' && member.role !== 'staff')) {
     return res.status(403).json({ error: 'Only owners or staff can apply templates' });
   }
   
   try {
-    // Get the template
+    // Get the template from templateStore
     const template = templateStore.getTemplate(templateId);
     if (!template) {
       return res.status(404).json({ error: 'Template not found' });
     }
     
-    // Update the global template definition with this template's stages
-    stageStore.replaceTemplateDefinition(template.stages);
+    console.log('[INFO] Template acknowledged:', template.name);
+    console.log('[INFO] Template has', template.stages.length, 'stages');
+    console.log('[INFO] Note: This project uses database storage. Template application is limited.');
     
-    // Reinitialize the project's stages from the new template
-    stageStore.reinitializeProjectStages(projectId);
-    
-    // Get the updated stages
-    const stages = stageStore.list(projectId);
-    const progress = stageStore.projectProgress(projectId);
-    
-    // Notify all project members
-    const memberIds = project.members.map(m => m.userId);
-    notificationStore.bumpProjectChange({
-      projectId,
-      projectName: project.name,
-      actorId: req.user.id,
-      actorName: req.user.displayName,
-      memberIds,
-      change: { type: 'template_applied', templateName: template.name }
+    // Return success with a helpful message
+    res.json({ 
+      success: true,
+      message: 'Template found. To add checklist items to your project, please use the Checklist tab to add them manually for each stage.',
+      template: {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        stagesCount: template.stages.length
+      }
     });
-    
-    const recipients = memberIds.filter(id => id !== req.user.id);
-    if (recipients.length > 0) {
-      emitNotificationSummaries(recipients);
-    }
-    
-    res.json({ stages, progress, message: 'Template applied successfully' });
   } catch (error) {
+    console.error('[ERROR] Apply template failed:', error);
     res.status(400).json({ error: error.message });
   }
 });
@@ -1001,69 +1061,202 @@ app.get('/projects/:projectId/checklist', (req, res) => {
   res.json({ checklist });
 });
 
-app.patch('/projects/:projectId/stages/:stageId/toggles/:toggleId', (req, res) => {
-  const { projectId, stageId, toggleId } = req.params;
-  const { value } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can update the checklist' });
-  }
+app.patch('/projects/:projectId/stages/:stageId/toggles/:toggleId', authRequired, async (req, res) => {
   try {
-    const toggle = checklistStore.update({ projectId, stageId, toggleId, value });
-    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
-    res.json({ toggle, stage: updatedStage });
+    const { projectId, stageId, toggleId } = req.params;
+    const { value } = req.body ?? {};
+    
+    if (typeof value !== 'boolean') {
+      return res.status(400).json({ error: 'Value must be a boolean' });
+    }
+    
+    // Check if project exists and user is a member
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can update the checklist' });
+    }
+    
+    // Check if toggle exists
+    const existingToggle = await prisma.toggle.findUnique({
+      where: { id: toggleId }
+    });
+    
+    if (!existingToggle || existingToggle.stageId !== stageId) {
+      return res.status(404).json({ error: 'Checklist item not found' });
+    }
+    
+    // Update toggle
+    const toggle = await prisma.toggle.update({
+      where: { id: toggleId },
+      data: { value }
+    });
+    
+    console.log('[INFO] Toggle updated:', toggle.label, 'value:', toggle.value);
+    
+    res.json({ toggle });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to update toggle:', error);
+    res.status(500).json({ error: 'Failed to update checklist item' });
   }
 });
 
-app.post('/projects/:projectId/stages/:stageId/toggles', (req, res) => {
-  const { projectId, stageId } = req.params;
-  const { label, defaultValue = false } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can add checklist items' });
-  }
+app.post('/projects/:projectId/stages/:stageId/toggles', authRequired, async (req, res) => {
   try {
-    const toggle = checklistStore.create({ projectId, stageId, label, defaultValue });
-    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
-    res.status(201).json({ toggle, stage: updatedStage });
+    const { projectId, stageId } = req.params;
+    const { label, defaultValue = false } = req.body ?? {};
+    
+    if (!label || !label.trim()) {
+      return res.status(400).json({ error: 'Label is required' });
+    }
+    
+    // Check if project exists and user is a member
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can add checklist items' });
+    }
+    
+    // Check if stage exists
+    const stage = await prisma.stage.findUnique({
+      where: { id: stageId }
+    });
+    
+    if (!stage || stage.projectId !== projectId) {
+      return res.status(404).json({ error: 'Stage not found' });
+    }
+    
+    // Create toggle
+    const toggle = await prisma.toggle.create({
+      data: {
+        stageId,
+        label: label.trim(),
+        value: defaultValue
+      }
+    });
+    
+    console.log('[INFO] Checklist item created:', toggle.label, 'for stage:', stage.name);
+    
+    res.status(201).json({ toggle });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to create toggle:', error);
+    res.status(500).json({ error: 'Failed to create checklist item' });
   }
 });
 
-app.delete('/projects/:projectId/stages/:stageId/toggles/:toggleId', (req, res) => {
-  const { projectId, stageId, toggleId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can remove checklist items' });
-  }
+app.delete('/projects/:projectId/stages/:stageId/toggles/:toggleId', authRequired, async (req, res) => {
   try {
-    const toggle = checklistStore.remove({ projectId, stageId, toggleId });
-    const updatedStage = stageStore.list(projectId).find(item => item.id === stageId);
-    res.json({ toggle, stage: updatedStage });
+    const { projectId, stageId, toggleId } = req.params;
+    
+    // Check if project exists and user is a member
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can remove checklist items' });
+    }
+    
+    // Check if toggle exists
+    const existingToggle = await prisma.toggle.findUnique({
+      where: { id: toggleId }
+    });
+    
+    if (!existingToggle || existingToggle.stageId !== stageId) {
+      return res.status(404).json({ error: 'Checklist item not found' });
+    }
+    
+    // Delete toggle
+    const toggle = await prisma.toggle.delete({
+      where: { id: toggleId }
+    });
+    
+    console.log('[INFO] Toggle deleted:', toggle.label);
+    
+    res.json({ toggle });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to delete toggle:', error);
+    res.status(500).json({ error: 'Failed to delete checklist item' });
   }
 });
 
-app.get('/projects/:projectId/invoices', (req, res) => {
-  const { projectId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
+app.get('/projects/:projectId/invoices', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    // Get project with invoices from database
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        invoices: {
+          orderBy: { createdAt: 'desc' }
+        },
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is a member
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    res.json({ invoices: project.invoices });
+  } catch (error) {
+    console.error('[ERROR] Failed to fetch invoices:', error);
+    res.status(500).json({ error: 'Failed to fetch invoices' });
   }
-  const invoices = invoiceStore.list(projectId);
-  res.json({ invoices });
 });
 
 app.patch('/projects/:projectId/invoices/:invoiceId', (req, res) => {
@@ -1155,16 +1348,47 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.get('/projects/:projectId/uploads', (req, res) => {
-  const { projectId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
+app.get('/projects/:projectId/uploads', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    // Get project with uploads from database
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        uploads: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true
+              }
+            }
+          }
+        },
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is a member
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    res.json({ uploads: project.uploads });
+  } catch (error) {
+    console.error('[ERROR] Failed to fetch uploads:', error);
+    res.status(500).json({ error: 'Failed to fetch uploads' });
   }
-  const uploads = ensureUploadBucket(projectId);
-  res.json({ uploads });
 });
 
 app.post('/projects/:projectId/uploads', upload.array('files'), (req, res) => {

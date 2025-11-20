@@ -15,6 +15,8 @@ export function authRequired(req, res, next) {
 
     // 2. Check if token exists
     if (!token) {
+      console.log('[AUTH] No token found in cookies for', req.method, req.path);
+      console.log('[AUTH] Cookies:', req.cookies);
       return res.status(401).json({ 
         message: 'Authentication required' 
       });
@@ -38,6 +40,8 @@ export function authRequired(req, res, next) {
       email: decoded.email,
       role: decoded.role
     };
+    
+    console.log('[AUTH] ✅ Token verified successfully for user:', decoded.email);
 
     // 5. Continue to next middleware/route handler
     next();
