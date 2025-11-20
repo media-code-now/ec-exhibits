@@ -5,6 +5,7 @@
   "description": "Express + Socket.IO server for EC Exhibits client portal prototype",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "dev": "node index.js"
   },
   "dependencies": {
