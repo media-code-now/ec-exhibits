@@ -20,6 +20,11 @@ if (!fs.existsSync(DATA_DIR)) {
  */
 export function saveData(filename, data) {
   try {
+    // Ensure data directory exists
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    
     const filePath = path.join(DATA_DIR, filename);
     const tempPath = `${filePath}.tmp`;
     
@@ -32,6 +37,15 @@ export function saveData(filename, data) {
     return true;
   } catch (error) {
     console.error(`[ERROR] Failed to save ${filename}:`, error.message);
+    // Clean up temp file if it exists
+    try {
+      const tempPath = path.join(DATA_DIR, `${filename}.tmp`);
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+    } catch (cleanupError) {
+      // Ignore cleanup errors
+    }
     return false;
   }
 }
@@ -61,18 +75,31 @@ export function loadData(filename) {
  * Good for frequent updates
  */
 export function saveDataAsync(filename, data) {
+  // Ensure data directory exists before async operations
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  
   const filePath = path.join(DATA_DIR, filename);
   const tempPath = `${filePath}.tmp`;
   
   fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf8', (err) => {
     if (err) {
       console.error(`[ERROR] Failed to save ${filename}:`, err.message);
+      // Clean up temp file if it exists
+      if (fs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
       return;
     }
     
     fs.rename(tempPath, filePath, (err) => {
       if (err) {
         console.error(`[ERROR] Failed to rename ${filename}:`, err.message);
+        // Clean up temp file on rename failure
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
       }
     });
   });
