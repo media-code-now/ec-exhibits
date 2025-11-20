@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
+    "build": "npx prisma generate",
     "setup-db": "npx prisma generate && npx prisma db push",
     "db:studio": "npx prisma studio",
     "db:generate": "npx prisma generate"
