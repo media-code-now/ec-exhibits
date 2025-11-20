@@ -313,7 +313,7 @@ export function Dashboard({
     if (isOwner) {
       items.push({ key: 'projects', label: 'Projects' });
     }
-    items.push({ key: 'files', label: 'Files' });
+    items.push({ key: 'files', label: 'Project Files' });
     if (isOwner || isStaff) {
       items.push({ key: 'checklist', label: 'Checklist' });
     }
