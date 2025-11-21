@@ -60,7 +60,13 @@ export default function App() {
   };
 
   const handleProjectCreated = project => {
-    setProjects(prev => [...prev, project]);
+    console.log('[App] handleProjectCreated called with:', project);
+    console.log('[App] Current projects before update:', projects);
+    setProjects(prev => {
+      const updated = [...prev, project];
+      console.log('[App] Updated projects:', updated);
+      return updated;
+    });
     setActiveProjectId(project.id);
     setShowCreateProject(false);
   };

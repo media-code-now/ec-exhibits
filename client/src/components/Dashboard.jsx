@@ -14,6 +14,9 @@ import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
 import { SavedTemplatesList } from './SavedTemplatesList.jsx';
 import { ChecklistPanel } from './ChecklistPanel.jsx';
 
+// Use environment variable for API URL
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 const generateRandomPassword = (length = 14) => {
   const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%&*?';
   const max = charset.length;

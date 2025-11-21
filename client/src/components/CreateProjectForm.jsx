@@ -24,9 +24,16 @@ export default function CreateProjectForm({ onProjectCreated, onCancel }) {
     setError(null);
 
     try {
+      console.log('[CreateProject] Submitting:', formData);
       const { data } = await axios.post('/projects', formData);
+      console.log('[CreateProject] Response received:', data);
+      console.log('[CreateProject] data.success:', data.success);
+      console.log('[CreateProject] data.project:', data.project);
       if (data.success && data.project) {
+        console.log('[CreateProject] Calling onProjectCreated with:', data.project);
         onProjectCreated(data.project);
+      } else {
+        console.warn('[CreateProject] Response missing success or project:', data);
       }
     } catch (err) {
       console.error('Failed to create project:', err);

@@ -39,11 +39,23 @@ const CLIENT_URL = process.env.CLIENT_URL || ALLOWED_ORIGIN;
 
 // Allow the configured origin and local dev origins (localhost on any port).
 function corsOriginHandler(origin, callback) {
+  console.log('[CORS] Request from origin:', origin);
+  
   // No origin (curl/postman) -> allow
   if (!origin) return callback(null, true);
   if (origin === ALLOWED_ORIGIN) return callback(null, true);
   if (origin === PROD_ORIGIN) return callback(null, true);
+  
+  // Allow localhost on any port
   if (/^https?:\/\/localhost(?::\d+)?$/.test(origin)) return callback(null, true);
+  
+  // Allow local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x) for mobile testing
+  if (/^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(?::\d+)?$/.test(origin)) {
+    console.log('[CORS] Allowing local network origin:', origin);
+    return callback(null, true);
+  }
+  
+  console.log('[CORS] BLOCKED origin:', origin);
   return callback(new Error('Not allowed by CORS'), false);
 }
 
@@ -304,11 +316,15 @@ app.get('/projects', authRequired, async (req, res) => {
 // POST /projects - Create a new project
 app.post('/projects', authRequired, async (req, res) => {
   try {
+    console.log('[PROJECT CREATE] Request received from user:', req.user?.email);
+    console.log('[PROJECT CREATE] Request body:', req.body);
+    
     const userId = req.user.id;
     const { name, show, size, moveInDate, openingDay, description } = req.body;
     
     // Validate required fields
     if (!name || name.trim() === '') {
+      console.log('[PROJECT CREATE] Validation failed: name is required');
       return res.status(400).json({ 
         success: false,
         error: 'Project name is required' 
