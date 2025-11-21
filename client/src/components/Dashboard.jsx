@@ -9,6 +9,7 @@ import { InvoicesCard } from './InvoicesCard.jsx';
 import { FilesCard } from './FilesCard.jsx';
 import { ProjectFilesCard } from './ProjectFilesCard.jsx';
 import { FileDropzone } from './FileDropzone.jsx';
+import ManageProjects from './ManageProjects.jsx';
 import logoMark from '../assets/exhibit-control-logo.svg';
 import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
 import { SavedTemplatesList } from './SavedTemplatesList.jsx';
@@ -101,10 +102,18 @@ export function Dashboard({
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: ({ stageId, payload }) =>
-      axios.post(`/projects/${project.id}/stages/${stageId}/tasks`, payload),
-    onSuccess: () => {
+    mutationFn: ({ stageId, payload }) => {
+      console.log('[Mutation] Creating task with:', { stageId, payload });
+      return axios.post(`/projects/${project.id}/stages/${stageId}/tasks`, payload);
+    },
+    onSuccess: (data) => {
+      console.log('[Mutation] Task created successfully:', data);
       queryClient.invalidateQueries(['stages', project.id]);
+    },
+    onError: (error) => {
+      console.error('[Mutation] Failed to create task:', error);
+      console.error('[Mutation] Error response:', error.response?.data);
+      alert(error.response?.data?.error || 'Failed to create task');
     }
   });
 
@@ -326,6 +335,7 @@ export function Dashboard({
     if (isOwner) {
       items.push({ key: 'template', label: 'Template' });
       items.push({ key: 'users', label: 'Users' });
+      items.push({ key: 'manage-projects', label: 'Manage Projects' });
     }
     return items;
   }, [isOwner, isStaff]);
@@ -339,6 +349,7 @@ export function Dashboard({
       set.add('projects');
       set.add('template');
       set.add('users');
+      set.add('manage-projects');
     }
     return set;
   }, [isOwner, isStaff]);
@@ -383,20 +394,11 @@ export function Dashboard({
     
     try {
       // Send password to backend to save in database
-      const response = await fetch(`${API_BASE}/users/${userId}/set-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ password })
-      });
+      const response = await axios.post(`/users/${userId}/set-password`, { password });
 
-      if (!response.ok) {
-        throw new Error('Failed to save password');
+      if (response.data.success) {
+        console.log('Password saved to database for user:', userId);
       }
-
-      console.log('Password saved to database for user:', userId);
 
       // Copy to clipboard
       const copied = await copyTextToClipboard(password);
@@ -405,6 +407,8 @@ export function Dashboard({
       }
     } catch (error) {
       console.error('Error generating password:', error);
+      console.error('Error response:', error.response?.data);
+      alert(error.response?.data?.error || 'Failed to save password');
       status = 'generated';
     }
     
@@ -840,16 +844,21 @@ export function Dashboard({
                     progressSummary={progressSummary}
                     canEdit={isOwner}
                     onStatusChange={(stageId, status) => stageMutation.mutate({ stageId, status })}
-                    onTaskCreate={(stageId, draft) =>
+                    onTaskCreate={(stageId, draft) => {
+                      console.log('[Dashboard] onTaskCreate called');
+                      console.log('[Dashboard] stageId:', stageId);
+                      console.log('[Dashboard] draft:', draft);
+                      const payload = {
+                        title: draft.title,
+                        dueDate: draft.dueDate || null,
+                        assignee: draft.assignee || null
+                      };
+                      console.log('[Dashboard] Payload to send:', payload);
                       createTaskMutation.mutate({
                         stageId,
-                        payload: {
-                          title: draft.title,
-                          dueDate: draft.dueDate || null,
-                          assignee: draft.assignee || null
-                        }
-                      })
-                    }
+                        payload
+                      });
+                    }}
                     onTaskStatusChange={(stageId, taskId, state) =>
                       updateTaskStatusMutation.mutate({ stageId, taskId, state })
                     }
@@ -1093,6 +1102,24 @@ export function Dashboard({
                   </div>
                 </div>
               </div>
+            </section>
+          )}
+
+          {effectiveSection === 'manage-projects' && isOwner && (
+            <section className="space-y-6">
+              <ManageProjects 
+                projects={projects} 
+                onProjectDeleted={(projectId) => {
+                  // Remove project from list after deletion
+                  const updatedProjects = projects.filter(p => p.id !== projectId);
+                  // If the deleted project was active, switch to another project or show empty state
+                  if (project.id === projectId && updatedProjects.length > 0) {
+                    onProjectChange(updatedProjects[0].id);
+                  }
+                  // Trigger refresh by calling parent's project updated handler
+                  window.location.reload(); // Simple refresh for now
+                }}
+              />
             </section>
           )}
         </main>

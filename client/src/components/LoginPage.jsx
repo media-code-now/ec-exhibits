@@ -30,9 +30,9 @@ export default function LoginPage({ onLogin }) {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Success - call onLogin with user data
+      // Success - call onLogin with user data and token (if provided)
       if (data.success && data.user) {
-        onLogin(data.user);
+        onLogin(data.user, data.token);
       } else {
         throw new Error('Invalid response from server');
       }

@@ -26,6 +26,13 @@ export default function App() {
   const checkAuth = async () => {
     console.log('[App] Checking authentication...');
     try {
+      // Check if we have a token in localStorage
+      const token = localStorage.getItem('token');
+      if (token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        console.log('[App] Found token in localStorage, set in axios');
+      }
+      
       console.log('[App] Calling /auth/me...');
       const { data } = await axios.get('/auth/me');
       console.log('[App] Auth response:', data);
@@ -47,16 +54,30 @@ export default function App() {
     } catch (err) {
       // User not authenticated, will show login page
       console.log('[App] Not authenticated:', err.message);
+      // Clear token if auth failed
+      localStorage.removeItem('token');
+      delete axios.defaults.headers.common['Authorization'];
     } finally {
       console.log('[App] Setting loading to false');
       setLoading(false);
     }
   };
 
-  const handleLogin = (userData) => {
+  const handleLogin = (userData, token) => {
     setUser(userData);
     setError(null);
     setActiveSection('dashboard');
+    
+    // Store token in localStorage for development (when cookies don't work cross-port)
+    if (token) {
+      localStorage.setItem('token', token);
+      // Set default Authorization header for all axios requests
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      console.log('[App] Token stored in localStorage and set in axios');
+    }
+    
+    // Reload projects after login
+    checkAuth();
   };
 
   const handleProjectCreated = project => {
@@ -81,6 +102,9 @@ export default function App() {
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      // Clear token from localStorage
+      localStorage.removeItem('token');
+      delete axios.defaults.headers.common['Authorization'];
       setUser(null);
       setProjects([]);
       setActiveProjectId(null);
@@ -107,24 +131,67 @@ export default function App() {
 
   // Show create project form or welcome message if no projects
   if (!activeProject && projects.length === 0) {
-    if (showCreateProject) {
+    // Only owners can create projects
+    if (user.role === 'owner') {
+      if (showCreateProject) {
+        return (
+          <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
+            <CreateProjectForm 
+              onProjectCreated={handleProjectCreated}
+              onCancel={() => setShowCreateProject(false)}
+            />
+          </div>
+        );
+      }
+
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
-          <CreateProjectForm 
-            onProjectCreated={handleProjectCreated}
-            onCancel={() => setShowCreateProject(false)}
-          />
+          <div className="w-full max-w-md space-y-6 rounded-3xl bg-white p-8 text-center shadow-xl">
+            {/* Icon */}
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100">
+              <svg className="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+
+            {/* Welcome message */}
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">
+                Welcome, {user.name || user.displayName}!
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Get started by creating your first project.
+              </p>
+            </div>
+
+            {/* Create Project Button */}
+            <button
+              onClick={() => setShowCreateProject(true)}
+              className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+            >
+              Create Your First Project
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       );
     }
 
+    // Staff/Client with no projects - show waiting message
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
         <div className="w-full max-w-md space-y-6 rounded-3xl bg-white p-8 text-center shadow-xl">
           {/* Icon */}
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100">
-            <svg className="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+            <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
           </div>
 
@@ -134,17 +201,12 @@ export default function App() {
               Welcome, {user.name || user.displayName}!
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              Get started by creating your first project.
+              You haven't been assigned to any projects yet.
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Contact your project owner to be added to a project.
             </p>
           </div>
-
-          {/* Create Project Button */}
-          <button
-            onClick={() => setShowCreateProject(true)}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-          >
-            Create Your First Project
-          </button>
 
           {/* Logout Button */}
           <button

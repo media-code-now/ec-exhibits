@@ -10,13 +10,22 @@ import jwt from 'jsonwebtoken';
  */
 export function authRequired(req, res, next) {
   try {
-    // 1. Read token from cookies
-    const token = req.cookies.token;
+    // 1. Read token from cookies OR Authorization header
+    let token = req.cookies.token;
+    
+    // If no cookie, check Authorization header (for development)
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
 
     // 2. Check if token exists
     if (!token) {
-      console.log('[AUTH] No token found in cookies for', req.method, req.path);
+      console.log('[AUTH] No token found in cookies or Authorization header for', req.method, req.path);
       console.log('[AUTH] Cookies:', req.cookies);
+      console.log('[AUTH] Authorization header:', req.headers.authorization);
       return res.status(401).json({ 
         message: 'Authentication required' 
       });

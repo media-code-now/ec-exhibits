@@ -63,6 +63,7 @@ export async function registerUser({ email, password, displayName, role = 'clien
  */
 export async function authenticateUser(email, password) {
   if (!email || !password) {
+    console.log('[AUTH] Missing email or password');
     return null;
   }
 
@@ -72,11 +73,18 @@ export async function authenticateUser(email, password) {
   });
 
   if (!user) {
+    console.log('[AUTH] User not found:', email);
     return null;
   }
 
+  console.log('[AUTH] User found:', user.email);
+  console.log('[AUTH] Password hash exists:', !!user.passwordHash);
+  console.log('[AUTH] Password hash value:', user.passwordHash);
+
   // Verify password
   const isValid = await bcrypt.compare(password, user.passwordHash);
+
+  console.log('[AUTH] Password valid:', isValid);
 
   if (!isValid) {
     return null;

@@ -45,7 +45,16 @@ export function ProgressStages({
 
   const handleCreateTask = stageId => {
     const draft = getDraft(stageId);
-    if (!draft.title.trim()) return;
+    console.log('[ProgressStages] handleCreateTask called');
+    console.log('[ProgressStages] stageId:', stageId);
+    console.log('[ProgressStages] draft:', draft);
+    
+    if (!draft.title.trim()) {
+      console.log('[ProgressStages] No title, returning');
+      return;
+    }
+    
+    console.log('[ProgressStages] Calling onTaskCreate with:', stageId, draft);
     onTaskCreate?.(stageId, draft);
     resetDraft(stageId);
   };

@@ -153,8 +153,11 @@ app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log('[LOGIN] Attempt from email:', email);
+
     // 1. Validate required fields
     if (!email || !password) {
+      console.log('[LOGIN] Missing email or password');
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
@@ -162,8 +165,11 @@ app.post('/auth/login', async (req, res) => {
     const user = await authenticateUser(email, password);
 
     if (!user) {
+      console.log('[LOGIN] Authentication failed for:', email);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    console.log('[LOGIN] Authentication successful for:', user.email, 'Role:', user.role);
 
     // 3. Sign JWT with userId and 7-day expiration
     const JWT_SECRET = process.env.JWT_SECRET;
@@ -183,16 +189,19 @@ app.post('/auth/login', async (req, res) => {
     );
 
     // 4. Send JWT as HTTP-only cookie
+    const isProduction = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true,        // Cannot be accessed by client-side JavaScript
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-site (Netlify -> Render)
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+      secure: isProduction,  // HTTPS only in production
+      sameSite: isProduction ? 'none' : 'lax', // 'none' for cross-site in production
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      path: '/'  // Cookie available for all paths
     };
     
     res.cookie('token', token, cookieOptions);
     
     console.log('[INFO] User logged in:', user.email);
+    console.log('[INFO] User ID:', user.id);
     console.log('[INFO] Cookie set with options:', cookieOptions);
     console.log('[INFO] Token length:', token.length);
 
@@ -206,7 +215,9 @@ app.post('/auth/login', async (req, res) => {
         role: user.role,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
-      }
+      },
+      // Include token in response for development (when cookies don't work cross-port)
+      token: !isProduction ? token : undefined
     });
   } catch (error) {
     console.error('[ERROR] Login failed:', error.message);
@@ -273,6 +284,7 @@ app.get('/auth/me', authRequired, async (req, res) => {
 app.get('/projects', authRequired, async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('[GET PROJECTS] Request from user:', req.user.email, 'ID:', userId);
     
     // Query projects where user is a member
     const projectMembers = await prisma.projectMember.findMany({
@@ -300,8 +312,15 @@ app.get('/projects', authRequired, async (req, res) => {
       }
     });
     
+    console.log('[GET PROJECTS] Found', projectMembers.length, 'project memberships');
+    
     // Extract projects from project members
     const projects = projectMembers.map(pm => pm.project);
+    
+    console.log('[GET PROJECTS] Returning', projects.length, 'projects');
+    if (projects.length > 0) {
+      console.log('[GET PROJECTS] Project names:', projects.map(p => p.name).join(', '));
+    }
     
     res.json({ 
       success: true,
@@ -317,6 +336,7 @@ app.get('/projects', authRequired, async (req, res) => {
 app.post('/projects', authRequired, async (req, res) => {
   try {
     console.log('[PROJECT CREATE] Request received from user:', req.user?.email);
+    console.log('[PROJECT CREATE] User ID:', req.user?.id);
     console.log('[PROJECT CREATE] Request body:', req.body);
     
     const userId = req.user.id;
@@ -356,7 +376,7 @@ app.post('/projects', authRequired, async (req, res) => {
       }
     });
     
-    console.log('[INFO] User added as owner');
+    console.log('[INFO] User added as owner with userId:', userId);
     
     // Create default stages
     const stages = [
@@ -411,6 +431,133 @@ app.post('/projects', authRequired, async (req, res) => {
     res.status(500).json({ 
       success: false,
       error: 'Failed to create project' 
+    });
+  }
+});
+
+// DELETE /projects/:projectId - Delete a project and all related data
+app.delete('/projects/:projectId', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user.id;
+    
+    console.log('[PROJECT DELETE] Request to delete project:', projectId, 'by user:', req.user.email);
+    
+    // Verify the project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Project not found' 
+      });
+    }
+    
+    // Verify the user is the project owner
+    const membership = project.members.find(m => m.userId === userId);
+    if (!membership || membership.role !== 'owner') {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Only project owners can delete projects' 
+      });
+    }
+    
+    console.log('[INFO] Deleting project and all related data...');
+    
+    // Delete all related data in correct order (respecting foreign key constraints)
+    // 1. Delete message reads
+    await prisma.messageRead.deleteMany({
+      where: { 
+        message: { 
+          projectId 
+        } 
+      }
+    });
+    console.log('[INFO] Deleted message reads');
+    
+    // 2. Delete messages
+    await prisma.message.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted messages');
+    
+    // 3. Delete notifications
+    await prisma.notification.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted notifications');
+    
+    // 4. Delete tasks
+    await prisma.task.deleteMany({
+      where: { 
+        stage: { 
+          projectId 
+        } 
+      }
+    });
+    console.log('[INFO] Deleted tasks');
+    
+    // 5. Delete toggles/checklist items
+    await prisma.toggle.deleteMany({
+      where: { 
+        stage: { 
+          projectId 
+        } 
+      }
+    });
+    console.log('[INFO] Deleted checklist items');
+    
+    // 6. Delete stages
+    await prisma.stage.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted stages');
+    
+    // 7. Delete uploads
+    await prisma.upload.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted uploads');
+    
+    // 8. Delete invoices
+    await prisma.invoice.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted invoices');
+    
+    // 9. Delete invites
+    await prisma.invite.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted invites');
+    
+    // 10. Delete project members
+    await prisma.projectMember.deleteMany({
+      where: { projectId }
+    });
+    console.log('[INFO] Deleted project members');
+    
+    // 11. Finally, delete the project itself
+    await prisma.project.delete({
+      where: { id: projectId }
+    });
+    
+    console.log('[SUCCESS] Project deleted:', projectId);
+    
+    res.json({ 
+      success: true,
+      message: 'Project and all related data deleted successfully' 
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to delete project:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to delete project' 
     });
   }
 });
@@ -571,6 +718,9 @@ app.post('/users/:userId/set-password', authRequired, async (req, res) => {
     const { userId } = req.params;
     const { password } = req.body;
 
+    console.log('[SET-PASSWORD] Request for userId:', userId);
+    console.log('[SET-PASSWORD] Password length:', password?.length);
+
     if (!password || password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
@@ -578,20 +728,24 @@ app.post('/users/:userId/set-password', authRequired, async (req, res) => {
     // Check if user exists in database
     const existingUser = await getUserById(userId);
     if (!existingUser) {
+      console.log('[SET-PASSWORD] User not found:', userId);
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Update user with new password
-    await updateUser(userId, { password });
+    console.log('[SET-PASSWORD] Setting password for:', existingUser.email);
 
-    console.log('[INFO] Password set for user:', existingUser.email);
+    // Update user with new password
+    const updatedUser = await updateUser(userId, { password });
+
+    console.log('[SET-PASSWORD] Password successfully set for user:', existingUser.email);
+    console.log('[SET-PASSWORD] Updated user:', updatedUser);
 
     res.json({ 
       success: true,
       message: 'Password set successfully'
     });
   } catch (error) {
-    console.error('[ERROR] Failed to set password:', error);
+    console.error('[SET-PASSWORD ERROR]:', error);
     res.status(500).json({ error: 'Failed to set password' });
   }
 });
@@ -1163,6 +1317,9 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
     const { projectId, stageId } = req.params;
     const { title, dueDate, assignee } = req.body ?? {};
 
+    console.log('[TASK CREATE] Request body:', req.body);
+    console.log('[TASK CREATE] Parsed - title:', title, 'dueDate:', dueDate, 'assignee:', assignee);
+
     if (!title || !title.trim()) {
       return res.status(400).json({ error: 'Task title is required' });
     }
@@ -1204,13 +1361,20 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
       data: {
         stageId,
         title: title.trim(),
-        status: 'not_started',
+        state: 'not_started',  // Fixed: use 'state' not 'status'
         dueDate: dueDate ? new Date(dueDate) : null,
         assignee: assignee || null
       }
     });
 
-    console.log('[INFO] Task created:', task.title, 'in stage:', stage.name);
+    console.log('[INFO] Task created:', {
+      id: task.id,
+      title: task.title,
+      dueDate: task.dueDate,
+      assignee: task.assignee,
+      state: task.state,
+      stage: stage.name
+    });
 
     // Get all project members for notifications
     const allMembers = await prisma.projectMember.findMany({
@@ -1873,8 +2037,10 @@ io.on('connection', socket => {
 });
 
 const PORT = process.env.PORT ?? 4000;
-httpServer.listen(PORT, () => {
+const HOST = process.env.HOST || '0.0.0.0'; // Listen on all network interfaces
+httpServer.listen(PORT, HOST, () => {
   console.log(`Real-time server listening on http://localhost:${PORT}`);
+  console.log(`Network access: http://192.168.0.16:${PORT}`);
   console.log('Demo users:', listUsers().map(u => `${u.displayName} (${u.id})`).join(', '));
   
   // Start overdue task checker (runs every hour)

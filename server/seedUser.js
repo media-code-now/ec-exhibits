@@ -22,7 +22,7 @@ async function seedTestUser() {
     const testUser = {
       email: 'matan@ec-exhibits.com',
       password: 'Password123!',
-      displayName: 'Test User',
+      displayName: 'Matan Yagil',
       role: 'owner' // Change to 'staff' or 'client' if needed
     };
 
