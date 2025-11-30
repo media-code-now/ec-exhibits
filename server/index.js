@@ -2150,10 +2150,60 @@ app.patch('/projects/:projectId/invoices/:invoiceId', authRequired, async (req, 
   }
 });
 
-app.get('/projects/:projectId/messages', (req, res) => {
-  const { projectId } = req.params;
-  const history = messageStore.history(projectId, req.user.id);
-  res.json({ messages: history });
+app.get('/projects/:projectId/messages', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    // Verify user is a member of the project
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    const isMember = project.members.some(member => member.userId === req.user.id);
+    if (!isMember) {
+      return res.status(403).json({ error: 'Not a member of this project' });
+    }
+
+    // Load messages from database
+    const messages = await prisma.message.findMany({
+      where: { projectId },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            displayName: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Format messages for response
+    const history = messages.map(msg => ({
+      id: msg.id,
+      projectId: msg.projectId,
+      body: msg.content,
+      author: {
+        id: msg.sender.id,
+        displayName: msg.sender.displayName,
+        role: msg.sender.role
+      },
+      createdAt: msg.createdAt.toISOString()
+    }));
+
+    res.json({ messages: history });
+  } catch (error) {
+    console.error('[ERROR] Failed to load messages:', error);
+    res.status(500).json({ error: 'Failed to load messages' });
+  }
 });
 
 app.get('/notifications', authRequired, (req, res) => {
@@ -2416,7 +2466,34 @@ io.on('connection', socket => {
       if (!members.includes(user.id)) return;
       socket.join(projectId);
 
-      const history = messageStore.history(projectId, user.id);
+      // Load message history from database
+      const messages = await prisma.message.findMany({
+        where: { projectId },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              displayName: true,
+              role: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      // Format messages to match client expectations
+      const history = messages.map(msg => ({
+        id: msg.id,
+        projectId: msg.projectId,
+        body: msg.content,
+        author: {
+          id: msg.sender.id,
+          displayName: msg.sender.displayName,
+          role: msg.sender.role
+        },
+        createdAt: msg.createdAt.toISOString()
+      }));
+
       socket.emit('project:bootstrapped', { projectId, history });
       const unread = notificationStore.unreadForProject({ userId: user.id, projectId });
       socket.emit('badge:sync', { projectId, unread });
@@ -2441,7 +2518,38 @@ io.on('connection', socket => {
       const members = project.members.map(member => member.userId);
       if (!members.includes(user.id)) return;
 
-      const message = messageStore.create({ projectId, user, body, attachments, clientMessageId });
+      // Save message to database
+      const savedMessage = await prisma.message.create({
+        data: {
+          projectId,
+          senderId: user.id,
+          content: body
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              displayName: true,
+              role: true
+            }
+          }
+        }
+      });
+
+      // Format message for socket emission
+      const message = {
+        id: savedMessage.id,
+        clientMessageId,
+        projectId: savedMessage.projectId,
+        body: savedMessage.content,
+        author: {
+          id: savedMessage.sender.id,
+          displayName: savedMessage.sender.displayName,
+          role: savedMessage.sender.role
+        },
+        createdAt: savedMessage.createdAt.toISOString()
+      };
+
       io.to(projectId).emit('message:new', message);
 
       const updates = notificationStore.bumpMessageUnread({
