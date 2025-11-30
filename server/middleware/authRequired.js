@@ -46,8 +46,10 @@ export function authRequired(req, res, next) {
     // 4. Set req.user with decoded token data
     req.user = {
       id: decoded.userId,
+      userId: decoded.userId,
       email: decoded.email,
-      role: decoded.role
+      role: decoded.role,
+      displayName: decoded.displayName
     };
     
     console.log('[AUTH] ✅ Token verified successfully for user:', decoded.email);

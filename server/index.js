@@ -182,7 +182,8 @@ app.post('/auth/login', async (req, res) => {
       {
         userId: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        displayName: user.displayName
       },
       JWT_SECRET,
       { expiresIn: '7d' } // 7 days expiration

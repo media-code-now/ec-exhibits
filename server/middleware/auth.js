@@ -28,7 +28,14 @@ export const authMiddleware = {
     if (!payload) {
       return next(new Error('Unauthorised'));
     }
-    socket.data.user = payload;
+    // Normalize payload structure - JWT has 'userId' but code expects 'id'
+    socket.data.user = {
+      id: payload.userId || payload.id,
+      userId: payload.userId || payload.id,
+      email: payload.email,
+      role: payload.role,
+      displayName: payload.displayName
+    };
     return next();
   }
 };
