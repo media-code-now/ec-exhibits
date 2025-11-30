@@ -573,22 +573,52 @@ export function Dashboard({
             </div>
           </header>
 
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white px-6 py-4 shadow-sm border border-slate-200">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Active Project</p>
-              <p className="text-lg font-semibold text-slate-900">{project.name}</p>
+          <div className="rounded-2xl bg-white px-6 py-5 shadow-sm border border-slate-200">
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Active Project</p>
+                <p className="text-lg font-semibold text-slate-900">{project.name}</p>
+              </div>
+              <select
+                value={project.id}
+                onChange={event => onProjectChange(event.target.value)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 focus:border-indigo-500 focus:outline-none"
+              >
+                {projects.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={project.id}
-              onChange={event => onProjectChange(event.target.value)}
-              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 focus:border-indigo-500 focus:outline-none"
-            >
-              {projects.map(option => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+            
+            {/* Project Details */}
+            <div className="grid gap-4 pt-4 border-t border-slate-100 md:grid-cols-2">
+              {project.size && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Booth Size</p>
+                  <p className="text-sm text-slate-700">{project.size}</p>
+                </div>
+              )}
+              {project.moveInDate && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Move-In Date</p>
+                  <p className="text-sm text-slate-700">
+                    {new Date(project.moveInDate).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
+              )}
+              {project.description && (
+                <div className="md:col-span-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Description</p>
+                  <p className="text-sm text-slate-700">{project.description}</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {effectiveSection === 'dashboard' && (

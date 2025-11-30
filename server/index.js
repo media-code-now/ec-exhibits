@@ -1259,24 +1259,83 @@ app.post('/projects/:projectId/apply-template', authRequired, async (req, res) =
       return res.status(404).json({ error: 'Template not found' });
     }
     
-    console.log('[INFO] Template acknowledged:', template.name);
-    console.log('[INFO] Template has', template.stages.length, 'stages');
-    console.log('[INFO] Note: This project uses database storage. Template application is limited.');
+    console.log('[APPLY-TEMPLATE] Applying template:', template.name);
+    console.log('[APPLY-TEMPLATE] Template has', template.stages.length, 'stages');
+    console.log('[APPLY-TEMPLATE] Project:', projectId);
     
-    // Return success with a helpful message
+    // Delete existing stages for this project
+    await prisma.stage.deleteMany({
+      where: { projectId }
+    });
+    
+    console.log('[APPLY-TEMPLATE] Existing stages deleted');
+    
+    // Create new stages from the template
+    const createdStages = [];
+    for (let i = 0; i < template.stages.length; i++) {
+      const templateStage = template.stages[i];
+      
+      const newStage = await prisma.stage.create({
+        data: {
+          projectId,
+          name: templateStage.name,
+          position: i,
+          status: 'not_started',
+          description: templateStage.description || null
+        }
+      });
+      
+      console.log('[APPLY-TEMPLATE] Created stage:', newStage.name);
+      createdStages.push(newStage);
+      
+      // Create checklist items (tasks) for this stage
+      if (templateStage.checklist && templateStage.checklist.length > 0) {
+        for (const checklistItem of templateStage.checklist) {
+          await prisma.task.create({
+            data: {
+              stageId: newStage.id,
+              title: checklistItem.text || checklistItem.title || checklistItem,
+              state: 'not_started'
+            }
+          });
+        }
+        console.log('[APPLY-TEMPLATE] Created', templateStage.checklist.length, 'tasks for stage:', newStage.name);
+      }
+    }
+    
+    console.log('[APPLY-TEMPLATE] Successfully applied template with', createdStages.length, 'stages');
+    
+    // Notify all project members
+    const memberIds = project.members.map(m => m.userId);
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds,
+      change: { type: 'template_applied', templateName: template.name }
+    });
+    
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    
+    // Return success with the created stages
     res.json({ 
       success: true,
-      message: 'Template found. To add checklist items to your project, please use the Checklist tab to add them manually for each stage.',
+      message: `Template "${template.name}" applied successfully with ${createdStages.length} stages`,
+      stages: createdStages,
       template: {
         id: template.id,
         name: template.name,
         description: template.description,
-        stagesCount: template.stages.length
+        stagesCount: createdStages.length
       }
     });
   } catch (error) {
     console.error('[ERROR] Apply template failed:', error);
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1408,11 +1467,16 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
 app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, async (req, res) => {
   try {
     const { projectId, stageId, taskId } = req.params;
-    const { status } = req.body ?? {};
+    const { state, status } = req.body ?? {};
 
-    if (!status) {
-      return res.status(400).json({ error: 'Status is required' });
+    // Accept both 'state' and 'status' for backwards compatibility
+    const taskState = state || status;
+
+    if (!taskState) {
+      return res.status(400).json({ error: 'State is required' });
     }
+
+    console.log('[TASK UPDATE] Updating task:', taskId, 'State:', taskState);
 
     // Check project and membership
     const project = await prisma.project.findUnique({
@@ -1449,15 +1513,15 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const wasCompleted = existingTask.status === 'completed';
+    const wasCompleted = existingTask.state === 'completed';
 
-    // Update task
+    // Update task (use 'state' field, not 'status')
     const task = await prisma.task.update({
       where: { id: taskId },
-      data: { status }
+      data: { state: taskState }
     });
 
-    console.log('[INFO] Task updated:', task.title, 'Status:', task.status);
+    console.log('[TASK UPDATE] Task updated successfully:', task.title, 'New state:', task.state);
 
     // Get all project members for notifications
     const allMembers = await prisma.projectMember.findMany({
@@ -1466,7 +1530,7 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
     });
 
     const memberIds = allMembers.map(m => m.userId);
-    const changeType = status === 'completed' && !wasCompleted ? 'task_completed' : 'task_status';
+    const changeType = taskState === 'completed' && !wasCompleted ? 'task_completed' : 'task_status';
 
     notificationStore.bumpProjectChange({
       projectId,
@@ -1478,7 +1542,7 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
         type: changeType, 
         stageName: existingTask.stage.name, 
         taskTitle: task.title, 
-        status 
+        status: taskState 
       }
     });
 

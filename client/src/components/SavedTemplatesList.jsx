@@ -34,7 +34,13 @@ export function SavedTemplatesList({ projectId }) {
       if (result.appliedToProject) {
         // Invalidate project stages to refresh dashboard and project tab
         queryClient.invalidateQueries(['stages', projectId]);
-        alert('Template loaded and applied to this project! The stages have been updated in Dashboard and Project tabs.');
+        
+        // Also invalidate any task-related queries
+        queryClient.invalidateQueries(['tasks', projectId]);
+        
+        console.log('[SavedTemplatesList] Template applied, queries invalidated');
+        
+        alert('Template loaded and applied to this project! The stages have been updated in Dashboard and Projects tabs.');
       } else {
         alert('Template loaded successfully! You can now view and edit it in the Template tab.');
       }
