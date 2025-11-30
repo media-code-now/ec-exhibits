@@ -191,61 +191,20 @@ export default function App() {
 
   const activeProject = projects.find(project => project.id === activeProjectId);
 
-  // Show create project form or welcome message if no projects
-  if (!activeProject && projects.length === 0) {
-    // Only owners can create projects
-    if (user.role === 'owner') {
-      if (showCreateProject) {
-        return (
-          <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
-            <CreateProjectForm 
-              onProjectCreated={handleProjectCreated}
-              onCancel={() => setShowCreateProject(false)}
-            />
-          </div>
-        );
-      }
+  // Show create project form if explicitly opened (owner only)
+  if (showCreateProject && user.role === 'owner') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
+        <CreateProjectForm 
+          onProjectCreated={handleProjectCreated}
+          onCancel={() => setShowCreateProject(false)}
+        />
+      </div>
+    );
+  }
 
-      return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
-          <div className="w-full max-w-md space-y-6 rounded-3xl bg-white p-8 text-center shadow-xl">
-            {/* Icon */}
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100">
-              <svg className="h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-
-            {/* Welcome message */}
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900">
-                Welcome, {user.name || user.displayName}!
-              </h2>
-              <p className="mt-2 text-sm text-slate-600">
-                Get started by creating your first project.
-              </p>
-            </div>
-
-            {/* Create Project Button */}
-            <button
-              onClick={() => setShowCreateProject(true)}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-            >
-              Create Your First Project
-            </button>
-
-            {/* Logout Button */}
-            <button
-              onClick={handleLogout}
-              className="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      );
-    }
-
+  // If no projects, show waiting message for staff/clients
+  if (!activeProject && projects.length === 0 && user.role !== 'owner') {
     // Staff/Client with no projects - show waiting message
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
