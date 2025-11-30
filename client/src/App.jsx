@@ -9,6 +9,68 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 axios.defaults.baseURL = API_URL;
 axios.defaults.withCredentials = true; // Important: Send cookies with requests
 
+// Add axios interceptors for robust error handling
+axios.interceptors.request.use(
+  (config) => {
+    return config;
+  },
+  (error) => {
+    console.error('[Axios Request Error]', error);
+    return Promise.reject(error);
+  }
+);
+
+axios.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    // Handle different types of errors gracefully
+    if (error.response) {
+      // Server responded with error status
+      console.error('[Axios Response Error]', error.response.status, error.response.data);
+    } else if (error.request) {
+      // Request was made but no response received
+      console.error('[Axios Network Error]', error.message);
+    } else {
+      // Something else happened
+      console.error('[Axios Error]', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Global error handler to suppress external extension errors (Solana, crypto wallets, etc.)
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    // Check if error is from a browser extension (Solana, Phantom, etc.)
+    if (
+      event.filename?.includes('solanaActionsContentScript') ||
+      event.filename?.includes('chrome-extension://') ||
+      event.filename?.includes('moz-extension://') ||
+      event.message?.includes('solanaActionsContentScript')
+    ) {
+      console.warn('[App] Suppressed external extension error:', event.message);
+      event.preventDefault(); // Prevent error from showing in console
+      event.stopPropagation();
+      return false;
+    }
+  });
+
+  // Handle unhandled promise rejections from extensions
+  window.addEventListener('unhandledrejection', (event) => {
+    if (
+      event.reason?.stack?.includes('solanaActionsContentScript') ||
+      event.reason?.stack?.includes('chrome-extension://') ||
+      event.reason?.stack?.includes('moz-extension://')
+    ) {
+      console.warn('[App] Suppressed external extension promise rejection');
+      event.preventDefault();
+      return false;
+    }
+  });
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [projects, setProjects] = useState([]);

@@ -178,6 +178,10 @@ model Invoice {
   amount      Decimal   @db.Decimal(10, 2)
   dueDate     DateTime? @map("due_date") @db.Date
   description String?
+  fileUrl     String?   @map("file_url")
+  fileName    String?   @map("file_name")
+  fileSize    Int?      @map("file_size")
+  fileType    String?   @map("file_type")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 

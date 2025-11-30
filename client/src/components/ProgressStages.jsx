@@ -24,7 +24,8 @@ export function ProgressStages({
   canEdit = false,
   onStatusChange,
   onTaskStatusChange,
-  onTaskCreate
+  onTaskCreate,
+  onTaskDelete
 }) {
   if (!stages.length) return null;
 
@@ -191,17 +192,31 @@ export function ProgressStages({
                     <div className="flex items-center gap-3">
                       {task.assignee && <span className="text-xs text-slate-400">{task.assignee}</span>}
                       {canEdit ? (
-                        <select
-                          value={task.state}
-                          onChange={event => onTaskStatusChange?.(stage.id, task.id, event.target.value)}
-                          className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 focus:border-indigo-500 focus:outline-none"
-                        >
-                          {taskStatuses.map(option => (
-                            <option key={option} value={option}>
-                              {taskLabelMap[option] ?? option}
-                            </option>
-                          ))}
-                        </select>
+                        <>
+                          <select
+                            value={task.state}
+                            onChange={event => onTaskStatusChange?.(stage.id, task.id, event.target.value)}
+                            className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 focus:border-indigo-500 focus:outline-none"
+                          >
+                            {taskStatuses.map(option => (
+                              <option key={option} value={option}>
+                                {taskLabelMap[option] ?? option}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Delete task "${task.title}"?`)) {
+                                onTaskDelete?.(stage.id, task.id);
+                              }
+                            }}
+                            className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50 transition"
+                            title="Delete task"
+                          >
+                            Delete
+                          </button>
+                        </>
                       ) : (
                         <span className="text-xs uppercase tracking-wide text-slate-400">
                           {taskLabelMap[task.state] ?? task.state}

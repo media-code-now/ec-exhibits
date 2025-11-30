@@ -614,6 +614,20 @@ app.get('/db/test', async (req, res) => {
 // NOTE: We use authRequired middleware on individual routes that need authentication
 // The old authMiddleware.http is NOT used anymore (it expects Authorization header, not cookies)
 
+// Multer configuration for file uploads
+const storage = multer.diskStorage({
+  destination: (_, __, cb) => cb(null, uploadDir),
+  filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const upload = multer({ storage });
+
+// Separate storage configuration for invoices
+const invoiceStorage = multer.diskStorage({
+  destination: (_, __, cb) => cb(null, path.join(uploadDir, 'invoices')),
+  filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const invoiceUpload = multer({ storage: invoiceStorage });
+
 app.get('/users', authRequired, async (req, res) => {
   try {
     if (req.user.role !== 'owner') {
@@ -1202,16 +1216,17 @@ app.get('/projects/:projectId/stages', authRequired, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    // Calculate progress
-    const totalStages = project.stages.length;
-    const completedStages = project.stages.filter(s => s.status === 'completed').length;
-    const inProgressStages = project.stages.filter(s => s.status === 'in_progress').length;
+    // Calculate progress based on tasks (not stages)
+    const allTasks = project.stages.flatMap(stage => stage.tasks);
+    const totalTasks = allTasks.length;
+    const completedTasks = allTasks.filter(t => t.state === 'completed').length;
+    const inProgressTasks = allTasks.filter(t => t.state === 'in_progress').length;
     
     const progress = {
-      total: totalStages,
-      completed: completedStages,
-      inProgress: inProgressStages,
-      percentage: totalStages > 0 ? Math.round((completedStages / totalStages) * 100) : 0
+      total: totalTasks,
+      completed: completedTasks,
+      inProgress: inProgressTasks,
+      percentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
     };
     
     res.json({ 
@@ -1288,18 +1303,21 @@ app.post('/projects/:projectId/apply-template', authRequired, async (req, res) =
       console.log('[APPLY-TEMPLATE] Created stage:', newStage.name);
       createdStages.push(newStage);
       
-      // Create checklist items (tasks) for this stage
-      if (templateStage.checklist && templateStage.checklist.length > 0) {
-        for (const checklistItem of templateStage.checklist) {
+      // Create tasks for this stage (from either 'tasks' or 'checklist' field for backwards compatibility)
+      const tasksSource = templateStage.tasks || templateStage.checklist || [];
+      
+      if (tasksSource.length > 0) {
+        for (const taskItem of tasksSource) {
           await prisma.task.create({
             data: {
               stageId: newStage.id,
-              title: checklistItem.text || checklistItem.title || checklistItem,
-              state: 'not_started'
+              title: taskItem.title || taskItem.text || taskItem,
+              state: 'not_started',
+              position: taskItem.position || 0
             }
           });
         }
-        console.log('[APPLY-TEMPLATE] Created', templateStage.checklist.length, 'tasks for stage:', newStage.name);
+        console.log('[APPLY-TEMPLATE] Created', tasksSource.length, 'tasks for stage:', newStage.name);
       }
     }
     
@@ -1339,19 +1357,78 @@ app.post('/projects/:projectId/apply-template', authRequired, async (req, res) =
   }
 });
 
-app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
-  const { projectId, stageId } = req.params;
-  const { status } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can change stage status' });
-  }
+app.patch('/projects/:projectId/stages/:stageId', authRequired, async (req, res) => {
   try {
-    const stage = stageStore.updateStatus({ projectId, stageId, status });
-    const progress = stageStore.projectProgress(projectId);
-    const memberIds = project.members.map(member => member.userId);
+    const { projectId, stageId } = req.params;
+    const { status } = req.body ?? {};
+
+    console.log('[STAGE UPDATE] Request to update stage:', stageId, 'Status:', status);
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    // Check if project exists and user has permission
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can change stage status' });
+    }
+
+    // Get existing stage
+    const existingStage = await prisma.stage.findUnique({
+      where: { id: stageId }
+    });
+
+    if (!existingStage || existingStage.projectId !== projectId) {
+      return res.status(404).json({ error: 'Stage not found' });
+    }
+
+    // Update stage status
+    const stage = await prisma.stage.update({
+      where: { id: stageId },
+      data: { status }
+    });
+
+    console.log('[STAGE UPDATE] Stage updated:', stage.name, 'New status:', stage.status);
+
+    // Calculate progress based on tasks (not stages)
+    const allStages = await prisma.stage.findMany({
+      where: { projectId },
+      include: {
+        tasks: true
+      },
+      orderBy: { position: 'asc' }
+    });
+
+    const allTasks = allStages.flatMap(stage => stage.tasks);
+    const total = allTasks.length;
+    const completed = allTasks.filter(t => t.state === 'completed').length;
+    const progress = { total, completed, percentage: total > 0 ? Math.round((completed / total) * 100) : 0 };
+
+    // Get all project members for notifications
+    const allMembers = await prisma.projectMember.findMany({
+      where: { projectId },
+      select: { userId: true }
+    });
+
+    const memberIds = allMembers.map(m => m.userId);
     notificationStore.bumpProjectChange({
       projectId,
       projectName: project.name,
@@ -1360,14 +1437,17 @@ app.patch('/projects/:projectId/stages/:stageId', (req, res) => {
       memberIds,
       change: { type: 'stage_status', stageName: stage.name, status }
     });
+
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
     }
     emitNotificationSummary(req.user.id);
+
     res.json({ stage, progress });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to update stage:', error);
+    res.status(500).json({ error: 'Failed to update stage' });
   }
 });
 
@@ -1555,6 +1635,90 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
   } catch (error) {
     console.error('[ERROR] Failed to update task:', error);
     res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+app.delete('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, async (req, res) => {
+  try {
+    const { projectId, stageId, taskId } = req.params;
+
+    console.log('[TASK DELETE] Request to delete task:', taskId);
+
+    // Check project and membership
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const member = project.members[0];
+    if (member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can delete tasks' });
+    }
+
+    // Get existing task
+    const existingTask = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        stage: true
+      }
+    });
+
+    if (!existingTask || existingTask.stageId !== stageId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Delete task
+    const task = await prisma.task.delete({
+      where: { id: taskId }
+    });
+
+    console.log('[TASK DELETE] Task deleted successfully:', task.title);
+
+    // Get all project members for notifications
+    const allMembers = await prisma.projectMember.findMany({
+      where: { projectId },
+      select: { userId: true }
+    });
+
+    const memberIds = allMembers.map(m => m.userId);
+
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds,
+      change: { 
+        type: 'task_deleted', 
+        stageName: existingTask.stage.name, 
+        taskTitle: task.title
+      }
+    });
+
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+
+    res.json({ 
+      success: true,
+      task 
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to delete task:', error);
+    res.status(500).json({ error: 'Failed to delete task' });
   }
 });
 
@@ -1768,18 +1932,169 @@ app.get('/projects/:projectId/invoices', authRequired, async (req, res) => {
   }
 });
 
-app.patch('/projects/:projectId/invoices/:invoiceId', (req, res) => {
-  const { projectId, invoiceId } = req.params;
-  const { paymentConfirmed } = req.body ?? {};
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const member = project.members.find(item => item.userId === req.user.id);
-  if (!member || member.role === 'client') {
-    return res.status(403).json({ error: 'Only owners or staff can update invoices' });
-  }
+app.post('/projects/:projectId/invoices', invoiceUpload.single('file'), authRequired, async (req, res) => {
   try {
-    const invoice = invoiceStore.updateStatus({ projectId, invoiceId, paymentConfirmed });
-    const memberIds = project.members.map(member => member.userId);
+    const { projectId } = req.params;
+    const { type, amount, dueDate, description, status } = req.body;
+    
+    // Get project with members
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is owner or staff
+    const member = project.members.find(m => m.userId === req.user.id);
+    if (!member || member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can create invoices' });
+    }
+    
+    // Prepare invoice data
+    const invoiceData = {
+      projectId,
+      type,
+      amount: parseFloat(amount),
+      status: status || 'pending',
+      description: description || null,
+      dueDate: dueDate ? new Date(dueDate) : null
+    };
+    
+    // If file was uploaded, add file info
+    if (req.file) {
+      const fileUrl = `uploads/invoices/${req.file.filename}`;
+      invoiceData.fileUrl = fileUrl;
+      invoiceData.fileName = req.file.originalname;
+      invoiceData.fileSize = req.file.size;
+      invoiceData.fileType = req.file.mimetype;
+    }
+    
+    // Create invoice in database
+    const invoice = await prisma.invoice.create({
+      data: invoiceData
+    });
+    
+    // Send notifications to all project members
+    const memberIds = project.members.map(m => m.userId);
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds,
+      change: {
+        type: 'invoice_created',
+        invoiceType: invoice.type,
+        amount: invoice.amount.toString()
+      }
+    });
+    
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    emitNotificationSummary(req.user.id);
+    
+    res.json({ invoice });
+  } catch (error) {
+    console.error('[ERROR] Failed to create invoice:', error);
+    res.status(500).json({ error: 'Failed to create invoice' });
+  }
+});
+
+app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async (req, res) => {
+  try {
+    const { projectId, invoiceId } = req.params;
+    
+    // Get project and invoice
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        },
+        invoices: {
+          where: { id: invoiceId }
+        }
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is a member
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    const invoice = project.invoices[0];
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    
+    if (!invoice.fileUrl) {
+      return res.status(404).json({ error: 'Invoice has no file attached' });
+    }
+    
+    // Construct absolute path
+    const absolutePath = path.resolve(__dirname, invoice.fileUrl);
+    
+    // Security: ensure the path is within uploads directory
+    const uploadsPath = path.resolve(__dirname, uploadDir);
+    if (!absolutePath.startsWith(uploadsPath)) {
+      return res.status(403).json({ error: 'Invalid file path' });
+    }
+    
+    // Check if file exists
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Send the file
+    res.download(absolutePath, invoice.fileName || 'invoice.pdf');
+  } catch (error) {
+    console.error('[ERROR] Failed to download invoice:', error);
+    res.status(500).json({ error: 'Failed to download invoice' });
+  }
+});
+
+app.patch('/projects/:projectId/invoices/:invoiceId', authRequired, async (req, res) => {
+  try {
+    const { projectId, invoiceId } = req.params;
+    const { status } = req.body ?? {};
+    
+    // Get project with members
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is owner or staff
+    const member = project.members.find(m => m.userId === req.user.id);
+    if (!member || member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can update invoices' });
+    }
+    
+    // Update invoice in database
+    const invoice = await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status }
+    });
+    
+    // Send notifications
+    const memberIds = project.members.map(m => m.userId);
     notificationStore.bumpProjectChange({
       projectId,
       projectName: project.name,
@@ -1788,18 +2103,21 @@ app.patch('/projects/:projectId/invoices/:invoiceId', (req, res) => {
       memberIds,
       change: {
         type: 'invoice_status',
-        invoiceNumber: invoice.number,
-        paymentConfirmed: invoice.paymentConfirmed
+        invoiceType: invoice.type,
+        status: invoice.status
       }
     });
+    
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
     }
     emitNotificationSummary(req.user.id);
+    
     res.json({ invoice });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to update invoice:', error);
+    res.status(500).json({ error: 'Failed to update invoice' });
   }
 });
 
@@ -1850,12 +2168,6 @@ function ensureUploadBucket(projectId) {
   }
   return uploadsByProject.get(projectId);
 }
-
-const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, uploadDir),
-  filename: (_, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
-});
-const upload = multer({ storage });
 
 app.get('/projects/:projectId/uploads', authRequired, async (req, res) => {
   try {

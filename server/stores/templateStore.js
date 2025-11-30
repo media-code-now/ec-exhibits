@@ -22,7 +22,12 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Review project requirements', position: 0 },
+          { title: 'Create initial design concept', position: 1 },
+          { title: 'Get client approval on design', position: 2 },
+          { title: 'Finalize specifications', position: 3 }
+        ],
         uploads: [],
         toggles: []
       },
@@ -37,7 +42,13 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Order materials and supplies', position: 0 },
+          { title: 'Fabricate booth components', position: 1 },
+          { title: 'Print graphics and signage', position: 2 },
+          { title: 'Quality control inspection', position: 3 },
+          { title: 'Package for shipping', position: 4 }
+        ],
         uploads: [],
         toggles: []
       },
@@ -52,7 +63,12 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Arrange shipping carrier', position: 0 },
+          { title: 'Create shipping manifest', position: 1 },
+          { title: 'Schedule pickup', position: 2 },
+          { title: 'Track shipment to venue', position: 3 }
+        ],
         uploads: [],
         toggles: []
       },
@@ -67,7 +83,13 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Receive materials at venue', position: 0 },
+          { title: 'Inspect for damage', position: 1 },
+          { title: 'Assemble booth structure', position: 2 },
+          { title: 'Install graphics and signage', position: 3 },
+          { title: 'Final walkthrough with client', position: 4 }
+        ],
         uploads: [],
         toggles: []
       },
@@ -82,7 +104,12 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Dismantle booth', position: 0 },
+          { title: 'Pack materials for return', position: 1 },
+          { title: 'Arrange return shipping', position: 2 },
+          { title: 'Final invoice and paperwork', position: 3 }
+        ],
         uploads: [],
         toggles: []
       }
@@ -107,7 +134,11 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Define project scope', position: 0 },
+          { title: 'Order materials', position: 1 },
+          { title: 'Coordinate logistics', position: 2 }
+        ],
         uploads: [],
         toggles: []
       },
@@ -122,7 +153,11 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Build components', position: 0 },
+          { title: 'Transport to venue', position: 1 },
+          { title: 'Setup on-site', position: 2 }
+        ],
         uploads: [],
         toggles: []
       },
@@ -137,7 +172,11 @@ const defaultTemplates = [
           checklistEditRoles: ['owner', 'staff'],
           clientCanUpload: false
         },
-        tasks: [],
+        tasks: [
+          { title: 'Client walkthrough', position: 0 },
+          { title: 'Final cleanup', position: 1 },
+          { title: 'Send final invoice', position: 2 }
+        ],
         uploads: [],
         toggles: []
       }

@@ -125,13 +125,44 @@ export function Dashboard({
     }
   });
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: ({ stageId, taskId }) =>
+      axios.delete(`/projects/${project.id}/stages/${stageId}/tasks/${taskId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['stages', project.id]);
+    },
+    onError: (error) => {
+      console.error('[Mutation] Failed to delete task:', error);
+      alert(error.response?.data?.error || 'Failed to delete task');
+    }
+  });
+
   const updateInvoiceStatusMutation = useMutation({
-    mutationFn: ({ invoiceId, paymentConfirmed }) =>
+    mutationFn: ({ invoiceId, status }) =>
       axios
-        .patch(`/projects/${project.id}/invoices/${invoiceId}`, { paymentConfirmed })
+        .patch(`/projects/${project.id}/invoices/${invoiceId}`, { status })
         .then(({ data }) => data.invoice),
     onSuccess: () => {
       queryClient.invalidateQueries(['invoices', project.id]);
+    }
+  });
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: (formData) =>
+      axios
+        .post(`/projects/${project.id}/invoices`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
+        .then(({ data }) => data.invoice),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['invoices', project.id]);
+      alert('Invoice uploaded successfully!');
+    },
+    onError: (error) => {
+      console.error('Failed to create invoice:', error);
+      alert('Failed to upload invoice. Please try again.');
     }
   });
 
@@ -312,10 +343,15 @@ export function Dashboard({
 
   const handleInvoiceToggle = invoice => {
     if (updateInvoiceStatusMutation.isPending) return;
+    const newStatus = invoice.status === 'paid' ? 'pending' : 'paid';
     updateInvoiceStatusMutation.mutate({
       invoiceId: invoice.id,
-      paymentConfirmed: !invoice.paymentConfirmed
+      status: newStatus
     });
+  };
+
+  const handleCreateInvoice = (formData) => {
+    createInvoiceMutation.mutate(formData);
   };
 
   const handleSectionSelect = key => {
@@ -638,7 +674,9 @@ export function Dashboard({
                   invoices={invoices}
                   canEdit={canManageInvoices}
                   onTogglePayment={handleInvoiceToggle}
+                  onCreateInvoice={handleCreateInvoice}
                   isUpdating={updateInvoiceStatusMutation.isPending}
+                  projectId={project.id}
                 />
                 <FilesCard projectId={project.id} />
                 {(isOwner || isStaff) && (
@@ -891,6 +929,9 @@ export function Dashboard({
                     }}
                     onTaskStatusChange={(stageId, taskId, state) =>
                       updateTaskStatusMutation.mutate({ stageId, taskId, state })
+                    }
+                    onTaskDelete={(stageId, taskId) =>
+                      deleteTaskMutation.mutate({ stageId, taskId })
                     }
                   />
                 </div>
