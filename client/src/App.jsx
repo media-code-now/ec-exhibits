@@ -79,6 +79,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem('token'));
 
   // Check if user is already logged in on mount
   useEffect(() => {
@@ -133,6 +134,7 @@ export default function App() {
     // Store token in localStorage for development (when cookies don't work cross-port)
     if (token) {
       localStorage.setItem('token', token);
+      setToken(token);
       // Set default Authorization header for all axios requests
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       console.log('[App] Token stored in localStorage and set in axios');
@@ -166,6 +168,7 @@ export default function App() {
     } finally {
       // Clear token from localStorage
       localStorage.removeItem('token');
+      setToken(null);
       delete axios.defaults.headers.common['Authorization'];
       setUser(null);
       setProjects([]);
@@ -256,6 +259,7 @@ export default function App() {
       user={user}
       project={activeProject}
       projects={projects}
+      token={token}
       onProjectChange={setActiveProjectId}
       onProjectCreated={handleProjectCreated}
       onProjectUpdated={handleProjectUpdated}

@@ -2127,12 +2127,12 @@ app.get('/projects/:projectId/messages', (req, res) => {
   res.json({ messages: history });
 });
 
-app.get('/notifications', (req, res) => {
+app.get('/notifications', authRequired, (req, res) => {
   const summary = notificationStore.summary(req.user.id);
   res.json(summary);
 });
 
-app.post('/notifications/read', (req, res) => {
+app.post('/notifications/read', authRequired, (req, res) => {
   const { category, projectId } = req.body ?? {};
   if (!category) {
     return res.status(400).json({ error: 'category is required' });
@@ -2154,7 +2154,7 @@ app.post('/notifications/read', (req, res) => {
   res.sendStatus(204);
 });
 
-app.post('/projects/:projectId/messages/read', (req, res) => {
+app.post('/projects/:projectId/messages/read', authRequired, (req, res) => {
   const { projectId } = req.params;
   notificationStore.markMessageRead({ userId: req.user.id, projectId });
   emitNotificationSummary(req.user.id);
