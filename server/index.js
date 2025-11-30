@@ -1131,23 +1131,35 @@ app.post('/projects/:projectId/invite', authRequired, async (req, res) => {
   }
 });
 
-app.delete('/projects/:projectId/members/:memberId', (req, res) => {
-  const { projectId, memberId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const actorMembership = project.members.find(item => item.userId === req.user.id);
-  if (!actorMembership || actorMembership.role !== 'owner') {
-    return res.status(403).json({ error: 'Only project owners can remove members' });
-  }
-  const target = project.members.find(item => item.userId === memberId);
-  if (!target) {
-    return res.status(404).json({ error: 'User not assigned to this project' });
-  }
-  if (target.role === 'owner') {
-    return res.status(400).json({ error: 'Cannot remove a project owner' });
-  }
-  const targetUser = getUser(memberId);
+app.delete('/projects/:projectId/members/:memberId', authRequired, async (req, res) => {
   try {
+    const { projectId, memberId } = req.params;
+    
+    // Get project from database with members
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+    
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    
+    const actorMembership = project.members.find(item => item.userId === req.user.id);
+    if (!actorMembership || actorMembership.role !== 'owner') {
+      return res.status(403).json({ error: 'Only project owners can remove members' });
+    }
+    
+    const target = project.members.find(item => item.userId === memberId);
+    if (!target) {
+      return res.status(404).json({ error: 'User not assigned to this project' });
+    }
+    if (target.role === 'owner') {
+      return res.status(400).json({ error: 'Cannot remove a project owner' });
+    }
+    
+    const targetUser = getUser(memberId);
+    
     const updated = projectStore.removeMember({ projectId, userId: memberId });
     const remainingIds = updated.members.map(member => member.userId);
     const remainingRecipients = remainingIds.filter(id => id !== req.user.id);
@@ -1179,7 +1191,8 @@ app.delete('/projects/:projectId/members/:memberId', (req, res) => {
     emitNotificationSummaries([...summaryTargets]);
     res.json({ project: updated });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[ERROR] Failed to remove member:', error);
+    res.status(500).json({ error: 'Failed to remove member' });
   }
 });
 
@@ -1722,16 +1735,31 @@ app.delete('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, a
   }
 });
 
-app.get('/projects/:projectId/checklist', (req, res) => {
-  const { projectId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
+app.get('/projects/:projectId/checklist', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    // Get project from database with members
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
+        }
+      }
+    });
+    
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    const checklist = checklistStore.list(projectId);
+    res.json({ checklist });
+  } catch (error) {
+    console.error('[ERROR] Failed to get checklist:', error);
+    res.status(500).json({ error: 'Failed to get checklist' });
   }
-  const checklist = checklistStore.list(projectId);
-  res.json({ checklist });
 });
 
 app.patch('/projects/:projectId/stages/:stageId/toggles/:toggleId', authRequired, async (req, res) => {
@@ -2307,42 +2335,57 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
 });
 
 app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
-  const { projectId, uploadId } = req.params;
-  const project = projectStore.get(projectId);
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  const members = project.members.map(member => member.userId);
-  if (!members.includes(req.user.id)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const bucket = ensureUploadBucket(projectId);
-  const record = bucket.find(item => item.id === uploadId);
-  if (!record) {
-    return res.status(404).json({ error: 'File not found' });
-  }
-
-  const absolutePath = path.resolve(uploadDir, record.storedName);
-  const uploadsRoot = path.resolve(uploadDir);
-  if (!absolutePath.startsWith(uploadsRoot)) {
-    return res.status(400).json({ error: 'Invalid file path' });
-  }
-
   try {
-    await fs.promises.access(absolutePath, fs.constants.R_OK);
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, Content-Length');
-    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-    res.download(absolutePath, record.fileName, err => {
-      if (err) {
-        console.error('Download error', err);
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'Unable to download file' });
-        } else {
-          res.end();
+    const { projectId, uploadId } = req.params;
+    
+    // Get project from database with members
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: {
+          where: { userId: req.user.id }
         }
       }
     });
+    
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (project.members.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    const bucket = ensureUploadBucket(projectId);
+    const record = bucket.find(item => item.id === uploadId);
+    if (!record) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const absolutePath = path.resolve(uploadDir, record.storedName);
+    const uploadsRoot = path.resolve(uploadDir);
+    if (!absolutePath.startsWith(uploadsRoot)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+
+    try {
+      await fs.promises.access(absolutePath, fs.constants.R_OK);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, Content-Length');
+      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+      res.download(absolutePath, record.fileName, err => {
+        if (err) {
+          console.error('Download error', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Unable to download file' });
+          } else {
+            res.end();
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Download error', error);
+      res.status(404).json({ error: 'File not found' });
+    }
   } catch (error) {
-    console.error('Download error', error);
-    res.status(404).json({ error: 'File not found' });
+    console.error('[ERROR] Failed to get upload:', error);
+    res.status(500).json({ error: 'Failed to get upload' });
   }
 });
 
@@ -2357,51 +2400,74 @@ io.on('connection', socket => {
   socket.join(`user:${user.id}`);
   emitNotificationSummary(user.id);
 
-  socket.on('project:join', ({ projectId }) => {
-    const project = projectStore.get(projectId);
-    if (!project) return;
-    const members = project.members.map(member => member.userId);
-    if (!members.includes(user.id)) return;
-    socket.join(projectId);
+  socket.on('project:join', async ({ projectId }) => {
+    try {
+      // Get project from database with members
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          members: true
+        }
+      });
+      
+      if (!project) return;
+      const members = project.members.map(member => member.userId);
+      if (!members.includes(user.id)) return;
+      socket.join(projectId);
 
-    const history = messageStore.history(projectId, user.id);
-    socket.emit('project:bootstrapped', { projectId, history });
-    const unread = notificationStore.unreadForProject({ userId: user.id, projectId });
-    socket.emit('badge:sync', { projectId, unread });
+      const history = messageStore.history(projectId, user.id);
+      socket.emit('project:bootstrapped', { projectId, history });
+      const unread = notificationStore.unreadForProject({ userId: user.id, projectId });
+      socket.emit('badge:sync', { projectId, unread });
+    } catch (error) {
+      console.error('[ERROR] Failed to join project:', error);
+    }
   });
 
-  socket.on('message:send', payload => {
+  socket.on('message:send', async payload => {
     const { projectId, body, attachments = [], clientMessageId } = payload;
-    const project = projectStore.get(projectId);
-    if (!project) return;
-    const members = project.members.map(member => member.userId);
-    if (!members.includes(user.id)) return;
-
-    const message = messageStore.create({ projectId, user, body, attachments, clientMessageId });
-    io.to(projectId).emit('message:new', message);
-
-    const updates = notificationStore.bumpMessageUnread({
-      projectId,
-      projectName: project.name,
-      authorId: user.id,
-      authorName: user.displayName,
-      messagePreview: body,
-      memberIds: members
-    });
-
-    updates.forEach(update => {
-      io.to(`user:${update.userId}`).emit('badge:sync', {
-        projectId: update.projectId,
-        unread: update.unread
+    
+    try {
+      // Get project from database with members
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          members: true
+        }
       });
-    });
-    emitNotificationSummaries(updates.map(update => update.userId));
-    emitNotificationSummary(user.id);
+      
+      if (!project) return;
+      const members = project.members.map(member => member.userId);
+      if (!members.includes(user.id)) return;
 
-    socket.emit('message:ack', {
-      clientMessageId,
-      messageId: message.id
-    });
+      const message = messageStore.create({ projectId, user, body, attachments, clientMessageId });
+      io.to(projectId).emit('message:new', message);
+
+      const updates = notificationStore.bumpMessageUnread({
+        projectId,
+        projectName: project.name,
+        authorId: user.id,
+        authorName: user.displayName,
+        messagePreview: body,
+        memberIds: members
+      });
+
+      updates.forEach(update => {
+        io.to(`user:${update.userId}`).emit('badge:sync', {
+          projectId: update.projectId,
+          unread: update.unread
+        });
+      });
+      emitNotificationSummaries(updates.map(update => update.userId));
+      emitNotificationSummary(user.id);
+
+      socket.emit('message:ack', {
+        clientMessageId,
+        messageId: message.id
+      });
+    } catch (error) {
+      console.error('[ERROR] Failed to send message:', error);
+    }
   });
 
   socket.on('message:read', ({ projectId }) => {
