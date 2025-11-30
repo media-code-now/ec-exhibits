@@ -131,13 +131,19 @@ export default function App() {
     setError(null);
     setActiveSection('dashboard');
     
-    // Store token in localStorage for development (when cookies don't work cross-port)
+    // Store token in localStorage for development only (when cookies don't work cross-port)
+    // In production, authentication uses HTTP-only cookies
     if (token) {
       localStorage.setItem('token', token);
       setToken(token);
       // Set default Authorization header for all axios requests
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      console.log('[App] Token stored in localStorage and set in axios');
+      console.log('[App] Token stored in localStorage and set in axios for development');
+    } else {
+      // In production, clear any leftover token and rely on cookies
+      localStorage.removeItem('token');
+      delete axios.defaults.headers.common['Authorization'];
+      console.log('[App] Using cookie-based authentication (production mode)');
     }
     
     // Reload projects after login

@@ -216,8 +216,9 @@ app.post('/auth/login', async (req, res) => {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
       },
-      // Include token in response for development (when cookies don't work cross-port)
-      token: !isProduction ? token : undefined
+      // Always include token in response for client-side storage
+      // Cookies don't work reliably cross-domain (Netlify -> Render)
+      token: token
     });
   } catch (error) {
     console.error('[ERROR] Login failed:', error.message);
