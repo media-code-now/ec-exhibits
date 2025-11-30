@@ -2449,10 +2449,12 @@ io.use(authMiddleware.socket);
 
 io.on('connection', socket => {
   const user = socket.data.user;
+  console.log('[SOCKET] User connected:', { id: user.id, email: user.email, displayName: user.displayName });
   socket.join(`user:${user.id}`);
   emitNotificationSummary(user.id);
 
   socket.on('project:join', async ({ projectId }) => {
+    console.log('[SOCKET] project:join received:', { projectId, userId: user.id });
     try {
       // Get project from database with members
       const project = await prisma.project.findUnique({
@@ -2462,10 +2464,21 @@ io.on('connection', socket => {
         }
       });
       
-      if (!project) return;
+      if (!project) {
+        console.error('[SOCKET] project:join - Project not found:', projectId);
+        return;
+      }
+      
       const members = project.members.map(member => member.userId);
-      if (!members.includes(user.id)) return;
+      console.log('[SOCKET] project:join - Project members:', members);
+      
+      if (!members.includes(user.id)) {
+        console.error('[SOCKET] project:join - User not a member:', { userId: user.id, projectId });
+        return;
+      }
+      
       socket.join(projectId);
+      console.log('[SOCKET] User joined project room:', { userId: user.id, projectId });
 
       // Load message history from database
       const messages = await prisma.message.findMany({
@@ -2506,6 +2519,8 @@ io.on('connection', socket => {
   socket.on('message:send', async payload => {
     const { projectId, body, attachments = [], clientMessageId } = payload;
     
+    console.log('[SOCKET] message:send received:', { projectId, body, clientMessageId, userId: user.id });
+    
     try {
       // Get project from database with members
       const project = await prisma.project.findUnique({
@@ -2515,11 +2530,29 @@ io.on('connection', socket => {
         }
       });
       
-      if (!project) return;
+      if (!project) {
+        console.error('[SOCKET] message:send - Project not found:', projectId);
+        socket.emit('message:error', {
+          clientMessageId,
+          error: 'Project not found'
+        });
+        return;
+      }
+      
       const members = project.members.map(member => member.userId);
-      if (!members.includes(user.id)) return;
+      console.log('[SOCKET] Project members:', members, 'Current user:', user.id);
+      
+      if (!members.includes(user.id)) {
+        console.error('[SOCKET] message:send - User not a member:', { userId: user.id, projectId });
+        socket.emit('message:error', {
+          clientMessageId,
+          error: 'Not a member of this project'
+        });
+        return;
+      }
 
       // Save message to database
+      console.log('[SOCKET] Saving message to database:', { projectId, senderId: user.id, content: body });
       const savedMessage = await prisma.message.create({
         data: {
           projectId,
@@ -2536,6 +2569,7 @@ io.on('connection', socket => {
           }
         }
       });
+      console.log('[SOCKET] Message saved successfully:', savedMessage.id);
 
       // Format message for socket emission
       const message = {
@@ -2551,6 +2585,7 @@ io.on('connection', socket => {
         createdAt: savedMessage.createdAt.toISOString()
       };
 
+      console.log('[SOCKET] Emitting message:new to room:', projectId);
       io.to(projectId).emit('message:new', message);
 
       const updates = notificationStore.bumpMessageUnread({
@@ -2571,10 +2606,12 @@ io.on('connection', socket => {
       emitNotificationSummaries(updates.map(update => update.userId));
       emitNotificationSummary(user.id);
 
+      console.log('[SOCKET] Sending message:ack:', { clientMessageId, messageId: message.id });
       socket.emit('message:ack', {
         clientMessageId,
         messageId: message.id
       });
+      console.log('[SOCKET] message:send completed successfully');
     } catch (error) {
       console.error('[ERROR] Failed to send message:', error);
     }
@@ -2585,6 +2622,10 @@ io.on('connection', socket => {
     const unread = notificationStore.unreadForProject({ userId: user.id, projectId });
     socket.emit('badge:sync', { projectId, unread });
     emitNotificationSummary(user.id);
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log('[SOCKET] User disconnected:', { userId: user.id, email: user.email, reason });
   });
 });
 
