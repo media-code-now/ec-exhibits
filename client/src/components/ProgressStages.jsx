@@ -189,6 +189,11 @@ export function ProgressStages({
                         )}
                       </div>
                     </div>
+                    {task.isOverdue && (
+                      <div className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-sm text-rose-800" role="alert">
+                        <strong className="font-semibold">⚠️ Alert:</strong> This task is overdue and requires immediate attention!
+                      </div>
+                    )}
                     <div className="flex items-center gap-3">
                       {task.assignee && <span className="text-xs text-slate-400">{task.assignee}</span>}
                       {canEdit ? (
