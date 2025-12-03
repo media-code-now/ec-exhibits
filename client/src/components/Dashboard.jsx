@@ -749,144 +749,7 @@ export function Dashboard({
 
           {effectiveSection === 'projects' && isOwner && (
             <>
-              <section className="grid gap-6 rounded-2xl bg-white p-6 shadow-sm border border-slate-200 lg:grid-cols-2">
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">Create a New Project</h3>
-                      <p className="text-sm text-slate-500">Add project details and pre-select collaborators.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateProject(previous => !previous)}
-                      className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-indigo-400 hover:text-indigo-600"
-                    >
-                      {showCreateProject ? 'Hide form' : 'New project'}
-                    </button>
-                  </div>
-                  {showCreateProject ? (
-                    <form onSubmit={handleCreateSubmit} className="mt-4 space-y-4">
-                      <label className="flex flex-col gap-2 text-sm text-slate-700">
-                        Project name
-                        <input
-                          value={createForm.name}
-                          onChange={event => setCreateForm(prev => ({ ...prev, name: event.target.value }))}
-                          className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                          placeholder="e.g. Winter Expo Build"
-                          required
-                        />
-                      </label>
-                      
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <label className="flex flex-col gap-2 text-sm text-slate-700">
-                          Show
-                          <input
-                            value={createForm.show}
-                            onChange={event => setCreateForm(prev => ({ ...prev, show: event.target.value }))}
-                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                            placeholder="e.g. CES 2025"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-2 text-sm text-slate-700">
-                          Size
-                          <input
-                            value={createForm.size}
-                            onChange={event => setCreateForm(prev => ({ ...prev, size: event.target.value }))}
-                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                            placeholder="e.g. 20x20 ft"
-                          />
-                        </label>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <label className="flex flex-col gap-2 text-sm text-slate-700">
-                          Move-in Date
-                          <input
-                            type="date"
-                            value={createForm.moveInDate}
-                            onChange={event => setCreateForm(prev => ({ ...prev, moveInDate: event.target.value }))}
-                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                          />
-                        </label>
-                        <label className="flex flex-col gap-2 text-sm text-slate-700">
-                          Opening Day
-                          <input
-                            type="date"
-                            value={createForm.openingDay}
-                            onChange={event => setCreateForm(prev => ({ ...prev, openingDay: event.target.value }))}
-                            className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                          />
-                        </label>
-                      </div>
-
-                      <label className="flex flex-col gap-2 text-sm text-slate-700">
-                        Description
-                        <textarea
-                          value={createForm.description}
-                          onChange={event => setCreateForm(prev => ({ ...prev, description: event.target.value }))}
-                          className="min-h-[80px] rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                          placeholder="Short summary for your team"
-                        />
-                      </label>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">Invite clients now</p>
-                          <div className="mt-2 grid gap-2">
-                            {clients.length === 0 && (
-                              <p className="text-xs text-slate-500">No clients available to invite.</p>
-                            )}
-                      {clients.map(client => (
-                            <label key={client.id} className="flex items-center gap-3 text-sm text-slate-600">
-                              <input
-                                type="checkbox"
-                                checked={createForm.clientIds.includes(client.id)}
-                                onChange={() => toggleSelection('clientIds', client.id)}
-                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              {client.displayName}
-                            </label>
-                          ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-700">Invite staff now</p>
-                          <div className="mt-2 grid gap-2">
-                            {staff.length === 0 && (
-                              <p className="text-xs text-slate-500">No staff available to invite.</p>
-                            )}
-                            {staff.map(member => (
-                              <label key={member.id} className="flex items-center gap-3 text-sm text-slate-600">
-                                <input
-                                  type="checkbox"
-                                  checked={createForm.staffIds.includes(member.id)}
-                                  onChange={() => toggleSelection('staffIds', member.id)}
-                                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                />
-                                {member.displayName}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="submit"
-                        className={clsx(
-                          'inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition',
-                          createProjectMutation.isPending ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-500'
-                        )}
-                        disabled={createProjectMutation.isPending}
-                      >
-                        {createProjectMutation.isPending ? 'Creating…' : 'Create project'}
-                      </button>
-                      {createProjectMutation.isError && (
-                        <p className="text-xs text-rose-600">{createProjectMutation.error.response?.data?.error ?? 'Unable to create project'}</p>
-                      )}
-                    </form>
-                  ) : (
-                    <p className="mt-4 text-sm text-slate-500">Press &ldquo;New project&rdquo; to open the creation form.</p>
-                  )}
-                </div>
-
+              <section className="grid gap-6 rounded-2xl bg-white p-6 shadow-sm border border-slate-200 lg:grid-cols-1">
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Invite a Collaborator</h3>
                   <p className="text-sm text-slate-500">Send a project invite email with an access link.</p>
@@ -1221,6 +1084,145 @@ export function Dashboard({
 
           {effectiveSection === 'manage-projects' && isOwner && (
             <section className="space-y-6">
+              {/* Create New Project Section */}
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Create a New Project</h3>
+                    <p className="text-sm text-slate-500">Add project details and pre-select collaborators.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateProject(previous => !previous)}
+                    className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:border-indigo-400 hover:text-indigo-600"
+                  >
+                    {showCreateProject ? 'Hide form' : 'New project'}
+                  </button>
+                </div>
+                {showCreateProject ? (
+                  <form onSubmit={handleCreateSubmit} className="mt-4 space-y-4">
+                    <label className="flex flex-col gap-2 text-sm text-slate-700">
+                      Project name
+                      <input
+                        value={createForm.name}
+                        onChange={event => setCreateForm(prev => ({ ...prev, name: event.target.value }))}
+                        className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        placeholder="e.g. Winter Expo Build"
+                        required
+                      />
+                    </label>
+                    
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="flex flex-col gap-2 text-sm text-slate-700">
+                        Show
+                        <input
+                          value={createForm.show}
+                          onChange={event => setCreateForm(prev => ({ ...prev, show: event.target.value }))}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                          placeholder="e.g. CES 2025"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-2 text-sm text-slate-700">
+                        Size
+                        <input
+                          value={createForm.size}
+                          onChange={event => setCreateForm(prev => ({ ...prev, size: event.target.value }))}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                          placeholder="e.g. 20x20 ft"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="flex flex-col gap-2 text-sm text-slate-700">
+                        Move-in Date
+                        <input
+                          type="date"
+                          value={createForm.moveInDate}
+                          onChange={event => setCreateForm(prev => ({ ...prev, moveInDate: event.target.value }))}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-2 text-sm text-slate-700">
+                        Opening Day
+                        <input
+                          type="date"
+                          value={createForm.openingDay}
+                          onChange={event => setCreateForm(prev => ({ ...prev, openingDay: event.target.value }))}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="flex flex-col gap-2 text-sm text-slate-700">
+                      Description
+                      <textarea
+                        value={createForm.description}
+                        onChange={event => setCreateForm(prev => ({ ...prev, description: event.target.value }))}
+                        className="min-h-[80px] rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        placeholder="Short summary for your team"
+                      />
+                    </label>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">Invite clients now</p>
+                        <div className="mt-2 grid gap-2">
+                          {clients.length === 0 && (
+                            <p className="text-xs text-slate-500">No clients available to invite.</p>
+                          )}
+                          {clients.map(client => (
+                            <label key={client.id} className="flex items-center gap-3 text-sm text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={createForm.clientIds.includes(client.id)}
+                                onChange={() => toggleSelection('clientIds', client.id)}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              {client.displayName}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">Invite staff now</p>
+                        <div className="mt-2 grid gap-2">
+                          {staff.length === 0 && (
+                            <p className="text-xs text-slate-500">No staff available to invite.</p>
+                          )}
+                          {staff.map(member => (
+                            <label key={member.id} className="flex items-center gap-3 text-sm text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={createForm.staffIds.includes(member.id)}
+                                onChange={() => toggleSelection('staffIds', member.id)}
+                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              {member.displayName}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className={clsx(
+                        'inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition',
+                        createProjectMutation.isPending ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-500'
+                      )}
+                      disabled={createProjectMutation.isPending}
+                    >
+                      {createProjectMutation.isPending ? 'Creating…' : 'Create project'}
+                    </button>
+                    {createProjectMutation.isError && (
+                      <p className="text-xs text-rose-600">{createProjectMutation.error.response?.data?.error ?? 'Unable to create project'}</p>
+                    )}
+                  </form>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">Press &ldquo;New project&rdquo; to open the creation form.</p>
+                )}
+              </div>
+
+              {/* Manage Projects Component */}
               <ManageProjects 
                 projects={projects} 
                 onProjectDeleted={(projectId) => {
