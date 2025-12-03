@@ -42,29 +42,34 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
     setFormData({ ...formData, file: e.target.files[0] });
   };
 
-  const handleDownload = async (invoiceId) => {
+  const handleDownload = async (invoiceId, fileName) => {
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:4000/projects/${projectId}/invoices/${invoiceId}/download`, {
+      const token = localStorage.getItem('token');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+      const response = await fetch(`${API_URL}/projects/${projectId}/invoices/${invoiceId}/download`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
-      if (!response.ok) throw new Error('Download failed');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Download failed:', response.status, errorText);
+        throw new Error(`Download failed: ${response.status}`);
+      }
       
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `invoice-${invoiceId}.pdf`;
+      a.download = fileName || `invoice-${invoiceId}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
       console.error('Download error:', error);
-      alert('Failed to download invoice');
+      alert('Failed to download invoice: ' + error.message);
     }
   };
 
@@ -184,7 +189,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
               {invoice.fileUrl && (
                 <button
                   type="button"
-                  onClick={() => handleDownload(invoice.id)}
+                  onClick={() => handleDownload(invoice.id, invoice.fileName)}
                   className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-200 transition"
                 >
                   📥 Download
