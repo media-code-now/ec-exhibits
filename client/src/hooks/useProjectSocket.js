@@ -11,6 +11,11 @@ export function useProjectSocket({ projectId, token }) {
     const socket = getSocket(token);
     socketRef.current = socket;
 
+    if (!socket) {
+      console.warn('[SOCKET-CLIENT] No socket created, token may be invalid');
+      return undefined;
+    }
+
     const handleBootstrap = ({ projectId: joinedId, history }) => {
       console.log('[SOCKET-CLIENT] project:bootstrapped', { joinedId, historyLength: history?.length });
       if (joinedId === projectId) setMessages(history);

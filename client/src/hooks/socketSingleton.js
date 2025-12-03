@@ -6,9 +6,15 @@ const sockets = new Map();
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export function getSocket(token) {
-  if (!token) return null;
-  if (sockets.has(token)) return sockets.get(token);
-  console.log('[SOCKET-CLIENT] Creating socket for token (len):', token?.length);
+  if (!token || token === 'null' || token === 'undefined' || token.length < 50) {
+    console.warn('[SOCKET-CLIENT] Invalid or missing token, not creating socket. Token:', token);
+    return null;
+  }
+  if (sockets.has(token)) {
+    console.log('[SOCKET-CLIENT] Returning existing socket for token');
+    return sockets.get(token);
+  }
+  console.log('[SOCKET-CLIENT] Creating socket for token (len):', token?.length, 'First 20 chars:', token?.substring(0, 20));
   const socket = io(SOCKET_URL, {
     auth: { token }
   });

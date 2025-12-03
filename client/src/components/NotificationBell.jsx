@@ -43,6 +43,11 @@ export function NotificationBell({ token, projects = [] }) {
     refreshSummary().catch(() => {});
 
     const socket = getSocket(token);
+    if (!socket) {
+      console.warn('[NotificationBell] No socket created, token may be invalid');
+      return undefined;
+    }
+
     const handleNotificationUpdate = payload => {
       if (cancelled) return;
       if (payload?.summary) {
