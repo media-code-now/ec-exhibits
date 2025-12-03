@@ -179,6 +179,18 @@ export function Dashboard({
     }
   });
 
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: (invoiceId) =>
+      axios.delete(`/projects/${project.id}/invoices/${invoiceId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['invoices', project.id]);
+    },
+    onError: (error) => {
+      console.error('Failed to delete invoice:', error);
+      alert(error.response?.data?.error || 'Failed to delete invoice');
+    }
+  });
+
   const { data: userDirectory } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
@@ -715,6 +727,7 @@ export function Dashboard({
                   canEdit={canManageInvoices}
                   onTogglePayment={handleInvoiceToggle}
                   onCreateInvoice={handleCreateInvoice}
+                  onDeleteInvoice={(invoiceId) => deleteInvoiceMutation.mutate(invoiceId)}
                   isUpdating={updateInvoiceStatusMutation.isPending}
                   projectId={project.id}
                 />

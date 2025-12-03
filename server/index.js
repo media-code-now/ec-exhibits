@@ -2169,6 +2169,87 @@ app.patch('/projects/:projectId/invoices/:invoiceId', authRequired, async (req, 
   }
 });
 
+app.delete('/projects/:projectId/invoices/:invoiceId', authRequired, async (req, res) => {
+  try {
+    const { projectId, invoiceId } = req.params;
+    
+    // Get project with members
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Check if user is owner or staff
+    const member = project.members.find(m => m.userId === req.user.id);
+    if (!member || member.role === 'client') {
+      return res.status(403).json({ error: 'Only owners or staff can delete invoices' });
+    }
+    
+    // Get invoice before deletion to access file info
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId }
+    });
+    
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    
+    if (invoice.projectId !== projectId) {
+      return res.status(403).json({ error: 'Invoice does not belong to this project' });
+    }
+    
+    // Delete the file from filesystem if it exists
+    if (invoice.fileUrl) {
+      const fs = require('fs');
+      const path = require('path');
+      const filePath = path.join(__dirname, invoice.fileUrl);
+      
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log('[INFO] Deleted invoice file:', filePath);
+      }
+    }
+    
+    // Delete invoice from database
+    await prisma.invoice.delete({
+      where: { id: invoiceId }
+    });
+    
+    console.log('[INFO] Invoice deleted:', invoiceId);
+    
+    // Send notifications
+    const memberIds = project.members.map(m => m.userId);
+    notificationStore.bumpProjectChange({
+      projectId,
+      projectName: project.name,
+      actorId: req.user.id,
+      actorName: req.user.displayName,
+      memberIds,
+      change: {
+        type: 'invoice_deleted',
+        invoiceType: invoice.type,
+        description: invoice.description
+      }
+    });
+    
+    const recipients = memberIds.filter(id => id !== req.user.id);
+    if (recipients.length > 0) {
+      emitNotificationSummaries(recipients);
+    }
+    
+    res.json({ success: true, message: 'Invoice deleted successfully' });
+  } catch (error) {
+    console.error('[ERROR] Failed to delete invoice:', error);
+    res.status(500).json({ error: 'Failed to delete invoice' });
+  }
+});
+
 app.get('/projects/:projectId/messages', authRequired, async (req, res) => {
   try {
     const { projectId } = req.params;

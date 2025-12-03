@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { useState } from 'react';
 
-export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, onCreateInvoice, isUpdating = false, projectId }) {
+export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, onCreateInvoice, onDeleteInvoice, isUpdating = false, projectId }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [formData, setFormData] = useState({
     type: 'estimate',
@@ -196,19 +196,33 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
                 </button>
               )}
               {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => onTogglePayment?.(invoice)}
-                  className={clsx(
-                    'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide transition',
-                    invoice.status === 'paid'
-                      ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-500'
-                  )}
-                  disabled={isUpdating}
-                >
-                  {isUpdating ? 'Updating…' : invoice.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onTogglePayment?.(invoice)}
+                    className={clsx(
+                      'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide transition',
+                      invoice.status === 'paid'
+                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                    )}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? 'Updating…' : invoice.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Delete invoice "${invoice.description || invoice.type}"?\n\nThis action cannot be undone.`)) {
+                        onDeleteInvoice?.(invoice.id);
+                      }
+                    }}
+                    className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-200 transition"
+                    title="Delete invoice"
+                  >
+                    🗑️ Delete
+                  </button>
+                </>
               )}
             </div>
           </article>
