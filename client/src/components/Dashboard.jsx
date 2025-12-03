@@ -125,6 +125,18 @@ export function Dashboard({
     }
   });
 
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ stageId, taskId, updates }) =>
+      axios.patch(`/projects/${project.id}/stages/${stageId}/tasks/${taskId}`, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['stages', project.id]);
+    },
+    onError: (error) => {
+      console.error('[Mutation] Failed to update task:', error);
+      alert(error.response?.data?.error || 'Failed to update task');
+    }
+  });
+
   const deleteTaskMutation = useMutation({
     mutationFn: ({ stageId, taskId }) =>
       axios.delete(`/projects/${project.id}/stages/${stageId}/tasks/${taskId}`),
@@ -929,6 +941,9 @@ export function Dashboard({
                     }}
                     onTaskStatusChange={(stageId, taskId, state) =>
                       updateTaskStatusMutation.mutate({ stageId, taskId, state })
+                    }
+                    onTaskUpdate={(stageId, taskId, updates) =>
+                      updateTaskMutation.mutate({ stageId, taskId, updates })
                     }
                     onTaskDelete={(stageId, taskId) =>
                       deleteTaskMutation.mutate({ stageId, taskId })

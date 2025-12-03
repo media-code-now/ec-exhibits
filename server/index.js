@@ -1573,16 +1573,23 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
 app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, async (req, res) => {
   try {
     const { projectId, stageId, taskId } = req.params;
-    const { state, status } = req.body ?? {};
+    const { state, status, dueDate, title, assignee } = req.body ?? {};
 
     // Accept both 'state' and 'status' for backwards compatibility
     const taskState = state || status;
 
-    if (!taskState) {
-      return res.status(400).json({ error: 'State is required' });
+    // Build update data object with only provided fields
+    const updateData = {};
+    if (taskState) updateData.state = taskState;
+    if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
+    if (title !== undefined) updateData.title = title.trim();
+    if (assignee !== undefined) updateData.assignee = assignee || null;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
     }
 
-    console.log('[TASK UPDATE] Updating task:', taskId, 'State:', taskState);
+    console.log('[TASK UPDATE] Updating task:', taskId, 'Update data:', updateData);
 
     // Check project and membership
     const project = await prisma.project.findUnique({
@@ -1621,13 +1628,13 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
 
     const wasCompleted = existingTask.state === 'completed';
 
-    // Update task (use 'state' field, not 'status')
+    // Update task with provided fields
     const task = await prisma.task.update({
       where: { id: taskId },
-      data: { state: taskState }
+      data: updateData
     });
 
-    console.log('[TASK UPDATE] Task updated successfully:', task.title, 'New state:', task.state);
+    console.log('[TASK UPDATE] Task updated successfully:', task.title, 'Updated fields:', Object.keys(updateData));
 
     // Get all project members for notifications
     const allMembers = await prisma.projectMember.findMany({
@@ -1636,7 +1643,7 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
     });
 
     const memberIds = allMembers.map(m => m.userId);
-    const changeType = taskState === 'completed' && !wasCompleted ? 'task_completed' : 'task_status';
+    const changeType = (taskState === 'completed' && !wasCompleted) ? 'task_completed' : 'task_status';
 
     notificationStore.bumpProjectChange({
       projectId,
@@ -1648,7 +1655,7 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
         type: changeType, 
         stageName: existingTask.stage.name, 
         taskTitle: task.title, 
-        status: taskState 
+        status: task.state 
       }
     });
 

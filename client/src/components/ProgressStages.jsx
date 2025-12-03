@@ -32,11 +32,13 @@ export function ProgressStages({
   onStatusChange,
   onTaskStatusChange,
   onTaskCreate,
-  onTaskDelete
+  onTaskDelete,
+  onTaskUpdate
 }) {
   if (!stages.length) return null;
 
   const [drafts, setDrafts] = useState({});
+  const [editingTask, setEditingTask] = useState(null); // Track which task is being edited
 
   const getDraft = stageId => drafts[stageId] ?? emptyDraft();
 
@@ -65,6 +67,35 @@ export function ProgressStages({
     console.log('[ProgressStages] Calling onTaskCreate with:', stageId, draft);
     onTaskCreate?.(stageId, draft);
     resetDraft(stageId);
+  };
+
+  const handleEditTask = (task) => {
+    setEditingTask({
+      id: task.id,
+      stageId: task.stageId,
+      title: task.title,
+      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      assignee: task.assignee || ''
+    });
+  };
+
+  const handleSaveTask = (stageId, taskId) => {
+    if (editingTask && editingTask.id === taskId) {
+      onTaskUpdate?.(stageId, taskId, {
+        title: editingTask.title,
+        dueDate: editingTask.dueDate,
+        assignee: editingTask.assignee
+      });
+      setEditingTask(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTask(null);
+  };
+
+  const updateEditingTask = (updates) => {
+    setEditingTask(prev => ({ ...prev, ...updates }));
   };
 
   const completed = stages.filter(stage => stage.status === 'completed').length;
@@ -157,86 +188,164 @@ export function ProgressStages({
                 </div>
               )}
               {stage.tasks?.length ? (
-                stage.tasks.map(task => (
+                stage.tasks.map(task => {
+                  const isEditing = editingTask?.id === task.id;
+                  
+                  return (
                   <div
                     key={task.id}
                     className={clsx(
-                      'flex flex-wrap items-center justify-between gap-3 rounded-lg border p-2 transition',
+                      'rounded-lg border p-3 transition',
                       task.isOverdue
-                        ? 'border-rose-300 bg-rose-50 hover:border-rose-400'
-                        : 'border-transparent hover:border-slate-200'
+                        ? 'border-rose-300 bg-rose-50'
+                        : isEditing 
+                          ? 'border-indigo-300 bg-indigo-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={clsx(
-                          'inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold',
-                          task.state === 'completed'
-                            ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
-                            : task.state === 'blocked'
-                              ? 'border-rose-300 bg-rose-50 text-rose-600'
-                              : task.state === 'in_progress'
-                                ? 'border-amber-300 bg-amber-50 text-amber-700'
-                                : 'border-slate-300 bg-white text-slate-600'
-                        )}
-                      >
-                        {task.state === 'completed' ? '✓' : ''}
-                      </span>
-                      <div>
-                        <p className="font-medium text-slate-700">{task.title}</p>
-                        {task.dueDate && (
-                          <p className={clsx('text-xs', task.isOverdue ? 'text-rose-600 font-semibold' : 'text-slate-500')}>
-                            Due {new Date(task.dueDate).toLocaleDateString()}
-                          </p>
-                        )}
-                        {task.isOverdue && (
-                          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-rose-600">
-                            <span aria-hidden>⏰</span> Overdue
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {task.isOverdue && (
-                      <div className="w-full rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-sm text-rose-800" role="alert">
-                        <strong className="font-semibold">⚠️ Alert:</strong> This task is overdue and requires immediate attention!
-                      </div>
-                    )}
-                    <div className="flex items-center gap-3">
-                      {task.assignee && <span className="text-xs text-slate-400">{task.assignee}</span>}
-                      {canEdit ? (
-                        <>
-                          <select
-                            value={task.state}
-                            onChange={event => onTaskStatusChange?.(stage.id, task.id, event.target.value)}
-                            className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 focus:border-indigo-500 focus:outline-none"
-                          >
-                            {taskStatuses.map(option => (
-                              <option key={option} value={option}>
-                                {taskLabelMap[option] ?? option}
-                              </option>
-                            ))}
-                          </select>
+                    {isEditing ? (
+                      // Edit Mode
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Task Title</label>
+                          <input
+                            type="text"
+                            value={editingTask.title}
+                            onChange={e => updateEditingTask({ title: e.target.value })}
+                            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Due Date</label>
+                            <input
+                              type="date"
+                              value={editingTask.dueDate}
+                              onChange={e => updateEditingTask({ dueDate: e.target.value })}
+                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Assignee</label>
+                            <input
+                              type="text"
+                              value={editingTask.assignee}
+                              onChange={e => updateEditingTask({ assignee: e.target.value })}
+                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                              placeholder="Enter assignee name"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (confirm(`Delete task "${task.title}"?`)) {
-                                onTaskDelete?.(stage.id, task.id);
-                              }
-                            }}
-                            className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50 transition"
-                            title="Delete task"
+                            onClick={() => handleSaveTask(stage.id, task.id)}
+                            className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-indigo-500"
                           >
-                            Delete
+                            Save
                           </button>
-                        </>
-                      ) : (
-                        <span className="text-xs uppercase tracking-wide text-slate-400">
-                          {taskLabelMap[task.state] ?? task.state}
-                        </span>
-                      )}
-                    </div>
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 hover:border-slate-400"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // View Mode
+                      <>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="flex items-start gap-2 flex-1">
+                            <span
+                              className={clsx(
+                                'inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold flex-shrink-0 mt-0.5',
+                                task.state === 'completed'
+                                  ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
+                                  : task.state === 'blocked'
+                                    ? 'border-rose-300 bg-rose-50 text-rose-600'
+                                    : task.state === 'in_progress'
+                                      ? 'border-amber-300 bg-amber-50 text-amber-700'
+                                      : 'border-slate-300 bg-white text-slate-600'
+                              )}
+                            >
+                              {task.state === 'completed' ? '✓' : ''}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-slate-700">{task.title}</p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                {task.dueDate && (
+                                  <p className={clsx('text-xs', task.isOverdue ? 'text-rose-600 font-semibold' : 'text-slate-500')}>
+                                    📅 Due {new Date(task.dueDate).toLocaleDateString()}
+                                  </p>
+                                )}
+                                {task.assignee && (
+                                  <p className="text-xs text-slate-500">
+                                    👤 {task.assignee}
+                                  </p>
+                                )}
+                              </div>
+                              {task.isOverdue && (
+                                <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-rose-600 mt-1">
+                                  <span aria-hidden>⏰</span> Overdue
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {canEdit && (
+                              <>
+                                <select
+                                  value={task.state}
+                                  onChange={event => onTaskStatusChange?.(stage.id, task.id, event.target.value)}
+                                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 focus:border-indigo-500 focus:outline-none"
+                                >
+                                  {taskStatuses.map(option => (
+                                    <option key={option} value={option}>
+                                      {taskLabelMap[option] ?? option}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditTask(task)}
+                                  className="rounded-full border border-indigo-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-600 hover:bg-indigo-50 transition"
+                                  title="Edit task"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm(`Delete task "${task.title}"?`)) {
+                                      onTaskDelete?.(stage.id, task.id);
+                                    }
+                                  }}
+                                  className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50 transition"
+                                  title="Delete task"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                            {!canEdit && (
+                              <span className="text-xs uppercase tracking-wide text-slate-400">
+                                {taskLabelMap[task.state] ?? task.state}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {task.isOverdue && (
+                          <div className="mt-3 rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-sm text-rose-800" role="alert">
+                            <strong className="font-semibold">⚠️ Alert:</strong> This task is overdue and requires immediate attention!
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-xs text-slate-500">No tasks listed for this stage.</p>
               )}
