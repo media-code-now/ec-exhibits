@@ -14,7 +14,14 @@ const taskLabelMap = {
   completed: 'Completed'
 };
 
-const emptyDraft = () => ({ title: '', dueDate: '', assignee: '' });
+// Helper function to get default due date (7 days from today)
+const getDefaultDueDate = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+};
+
+const emptyDraft = () => ({ title: '', dueDate: getDefaultDueDate(), assignee: '' });
 
 export function ProgressStages({
   stages = [],
@@ -237,25 +244,36 @@ export function ProgressStages({
               {canEdit && (
                 <div className="rounded-lg bg-white p-3 shadow-inner">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Add task</p>
-                  <div className="mt-2 grid gap-2 md:grid-cols-2">
-                    <input
-                      value={getDraft(stage.id).title}
-                      onChange={event => updateDraft(stage.id, { title: event.target.value })}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none md:col-span-2"
-                      placeholder="Task title"
-                    />
-                    <input
-                      type="date"
-                      value={getDraft(stage.id).dueDate}
-                      onChange={event => updateDraft(stage.id, { dueDate: event.target.value })}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    />
-                    <input
-                      value={getDraft(stage.id).assignee}
-                      onChange={event => updateDraft(stage.id, { assignee: event.target.value })}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                      placeholder="Assignee"
-                    />
+                  <div className="mt-2 space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Task Title *</label>
+                      <input
+                        value={getDraft(stage.id).title}
+                        onChange={event => updateDraft(stage.id, { title: event.target.value })}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        placeholder="Enter task title"
+                      />
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Due Date</label>
+                        <input
+                          type="date"
+                          value={getDraft(stage.id).dueDate}
+                          onChange={event => updateDraft(stage.id, { dueDate: event.target.value })}
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Assignee</label>
+                        <input
+                          value={getDraft(stage.id).assignee}
+                          onChange={event => updateDraft(stage.id, { assignee: event.target.value })}
+                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                          placeholder="Enter assignee name"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button

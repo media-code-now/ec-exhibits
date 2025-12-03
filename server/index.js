@@ -1510,13 +1510,24 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
       return res.status(404).json({ error: 'Stage not found' });
     }
 
+    // Set default due date if not provided (7 days from today)
+    let taskDueDate = null;
+    if (dueDate) {
+      taskDueDate = new Date(dueDate);
+    } else {
+      // Default: 7 days from now
+      const defaultDate = new Date();
+      defaultDate.setDate(defaultDate.getDate() + 7);
+      taskDueDate = defaultDate;
+    }
+
     // Create task
     const task = await prisma.task.create({
       data: {
         stageId,
         title: title.trim(),
         state: 'not_started',  // Fixed: use 'state' not 'status'
-        dueDate: dueDate ? new Date(dueDate) : null,
+        dueDate: taskDueDate,
         assignee: assignee || null
       }
     });
