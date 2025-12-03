@@ -14,6 +14,7 @@ import logoMark from '../assets/exhibit-control-logo.svg';
 import { TemplateAdminPanel } from './TemplateAdminPanel.jsx';
 import { SavedTemplatesList } from './SavedTemplatesList.jsx';
 import { ChecklistPanel } from './ChecklistPanel.jsx';
+import { OverdueAlert } from './OverdueAlert.jsx';
 
 // Use environment variable for API URL
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -261,6 +262,24 @@ export function Dashboard({
   const progressSummary = stageResponse?.progress;
   const canManageChecklist = isOwner || isStaff;
 
+  // Collect all overdue tasks from all stages with stage names
+  const allOverdueTasks = useMemo(() => {
+    const tasks = [];
+    stages.forEach(stage => {
+      if (stage.tasks?.length) {
+        stage.tasks.forEach(task => {
+          if (task.isOverdue && task.state !== 'completed') {
+            tasks.push({
+              ...task,
+              stageName: stage.name
+            });
+          }
+        });
+      }
+    });
+    return tasks;
+  }, [stages]);
+
   const directory = userDirectory?.users ?? [];
   const clients = useMemo(
     () => directory.filter(candidate => candidate.role === 'client'),
@@ -482,6 +501,15 @@ export function Dashboard({
 
   return (
     <div className="min-h-screen bg-slate-100">
+      {/* Overdue Alert Popup */}
+      <OverdueAlert 
+        tasks={allOverdueTasks} 
+        invoices={invoices}
+        onDismiss={() => {
+          console.log('[Dashboard] Overdue alert dismissed');
+        }}
+      />
+
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8 lg:grid lg:grid-cols-[280px,1fr] lg:gap-8">
         <aside className="hidden rounded-3xl bg-slate-900 px-6 py-8 text-slate-200 lg:flex lg:flex-col">
           <div className="mb-10 space-y-2">
