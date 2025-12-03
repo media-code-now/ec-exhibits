@@ -8,9 +8,16 @@ const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 export function getSocket(token) {
   if (!token) return null;
   if (sockets.has(token)) return sockets.get(token);
+  console.log('[SOCKET-CLIENT] Creating socket for token (len):', token?.length);
   const socket = io(SOCKET_URL, {
     auth: { token }
   });
+
+  socket.on('connect', () => console.log('[SOCKET-CLIENT] connected', socket.id));
+  socket.on('connect_error', err => console.error('[SOCKET-CLIENT] connect_error', err && err.message));
+  socket.on('disconnect', reason => console.log('[SOCKET-CLIENT] disconnected', reason));
+  socket.on('reconnect_attempt', attempt => console.log('[SOCKET-CLIENT] reconnect attempt', attempt));
+
   sockets.set(token, socket);
   return socket;
 }

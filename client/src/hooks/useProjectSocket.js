@@ -12,17 +12,21 @@ export function useProjectSocket({ projectId, token }) {
     socketRef.current = socket;
 
     const handleBootstrap = ({ projectId: joinedId, history }) => {
+      console.log('[SOCKET-CLIENT] project:bootstrapped', { joinedId, historyLength: history?.length });
       if (joinedId === projectId) setMessages(history);
     };
     const handleNewMessage = message => {
+      console.log('[SOCKET-CLIENT] message:new', message);
       if (message.projectId === projectId) setMessages(prev => [...prev, message]);
     };
     const handleAck = ({ clientMessageId, messageId }) => {
+      console.log('[SOCKET-CLIENT] message:ack', { clientMessageId, messageId });
       setMessages(prev =>
         prev.map(msg => (msg.clientMessageId === clientMessageId ? { ...msg, id: messageId, pending: false } : msg))
       );
     };
     const handleBadge = ({ projectId: incoming, unread }) => {
+      console.log('[SOCKET-CLIENT] badge:sync', { projectId: incoming, unread });
       if (incoming === projectId) setBadge(unread);
     };
 
@@ -31,11 +35,15 @@ export function useProjectSocket({ projectId, token }) {
     socket.on('message:ack', handleAck);
     socket.on('badge:sync', handleBadge);
 
-    if (socket.connected) {
+    const doJoin = () => {
+      console.log('[SOCKET-CLIENT] Emitting project:join', { projectId });
       socket.emit('project:join', { projectId });
+    };
+    if (socket.connected) {
+      doJoin();
     } else {
       socket.once('connect', () => {
-        socket.emit('project:join', { projectId });
+        doJoin();
       });
     }
 
@@ -59,6 +67,7 @@ export function useProjectSocket({ projectId, token }) {
         createdAt: new Date().toISOString()
       };
       setMessages(prev => [...prev, optimistic]);
+      console.log('[SOCKET-CLIENT] Emitting message:send', { projectId, clientMessageId: optimistic.clientMessageId });
       socketRef.current.emit('message:send', {
         projectId,
         body,
