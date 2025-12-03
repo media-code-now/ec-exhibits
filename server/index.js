@@ -2667,6 +2667,8 @@ function checkOverdueTasks() {
               notificationStore.bumpProjectChange({
                 projectId: project.id,
                 projectName: project.name,
+                actorId: 'system',
+                actorName: 'System',
                 memberIds,
                 change: {
                   type: 'task_overdue',

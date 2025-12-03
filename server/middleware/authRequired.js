@@ -1,14 +1,15 @@
 import jwt from 'jsonwebtoken';
+import prisma from '../lib/db.js';
 
 /**
  * Authentication middleware that verifies JWT token from HTTP-only cookie
  * 
  * Reads token from req.cookies.token
  * Verifies using JWT_SECRET
- * Sets req.user = { id: userId, email, role } if valid
+ * Sets req.user = { id: userId, email, role, displayName } if valid
  * Returns 401 if missing or invalid
  */
-export function authRequired(req, res, next) {
+export async function authRequired(req, res, next) {
   try {
     // 1. Read token from cookies OR Authorization header
     let token = req.cookies.token;
@@ -44,12 +45,27 @@ export function authRequired(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
 
     // 4. Set req.user with decoded token data
+    // If displayName is missing (old token), fetch from database
+    let displayName = decoded.displayName;
+    if (!displayName) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.userId },
+          select: { displayName: true }
+        });
+        displayName = user?.displayName || 'Unknown User';
+      } catch (dbError) {
+        console.error('[AUTH] Failed to fetch displayName from database:', dbError.message);
+        displayName = 'Unknown User';
+      }
+    }
+
     req.user = {
       id: decoded.userId,
       userId: decoded.userId,
       email: decoded.email,
       role: decoded.role,
-      displayName: decoded.displayName
+      displayName
     };
     
     console.log('[AUTH] ✅ Token verified successfully for user:', decoded.email);
