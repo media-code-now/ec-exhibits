@@ -105,15 +105,6 @@ export default function LoginPage({ onLogin }) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        {/* Test Credentials Helper (Optional - Remove in Production) */}
-        <div className="border-t border-slate-200 pt-4">
-          <p className="text-xs text-slate-500 text-center mb-2">Test Credentials:</p>
-          <div className="space-y-1 text-xs text-slate-400 text-center">
-            <p>Email: <code className="bg-slate-100 px-1 py-0.5 rounded">matan@ec-exhibits.com</code></p>
-            <p>Password: <code className="bg-slate-100 px-1 py-0.5 rounded">Password123!</code></p>
-          </div>
-        </div>
       </div>
     </div>
   );
