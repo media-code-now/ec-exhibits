@@ -2206,8 +2206,6 @@ app.delete('/projects/:projectId/invoices/:invoiceId', authRequired, async (req,
     
     // Delete the file from filesystem if it exists
     if (invoice.fileUrl) {
-      const fs = require('fs');
-      const path = require('path');
       const filePath = path.join(__dirname, invoice.fileUrl);
       
       if (fs.existsSync(filePath)) {
