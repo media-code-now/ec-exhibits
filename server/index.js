@@ -1231,17 +1231,36 @@ app.get('/projects/:projectId/stages', authRequired, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    // Calculate progress based on tasks (not stages)
+    // Calculate progress based on BOTH stages and tasks
+    const totalStages = project.stages.length;
+    const completedStages = project.stages.filter(s => s.status === 'completed').length;
+    
     const allTasks = project.stages.flatMap(stage => stage.tasks);
     const totalTasks = allTasks.length;
     const completedTasks = allTasks.filter(t => t.state === 'completed').length;
-    const inProgressTasks = allTasks.filter(t => t.state === 'in_progress').length;
+    
+    // Calculate percentage: combine stages and tasks
+    // If there are tasks, weight them equally with stages
+    let percentComplete = 0;
+    if (totalStages > 0 && totalTasks > 0) {
+      // 50% weight for stages, 50% weight for tasks
+      const stagePercent = (completedStages / totalStages) * 50;
+      const taskPercent = (completedTasks / totalTasks) * 50;
+      percentComplete = Math.round(stagePercent + taskPercent);
+    } else if (totalStages > 0) {
+      // Only stages, no tasks
+      percentComplete = Math.round((completedStages / totalStages) * 100);
+    } else if (totalTasks > 0) {
+      // Only tasks, no stages (unlikely)
+      percentComplete = Math.round((completedTasks / totalTasks) * 100);
+    }
     
     const progress = {
-      total: totalTasks,
-      completed: completedTasks,
-      inProgress: inProgressTasks,
-      percentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+      totalStages,
+      completedStages,
+      totalTasks,
+      completedTasks,
+      percentComplete
     };
     
     res.json({ 
