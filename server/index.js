@@ -2059,6 +2059,8 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
   try {
     const { projectId, invoiceId } = req.params;
     
+    console.log(`[INVOICE DOWNLOAD] User ${req.user.email} requesting invoice ${invoiceId} from project ${projectId}`);
+    
     // Get project and invoice
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -2073,42 +2075,50 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
     });
     
     if (!project) {
+      console.log('[INVOICE DOWNLOAD] Project not found:', projectId);
       return res.status(404).json({ error: 'Project not found' });
     }
     
     // Check if user is a member
     if (project.members.length === 0) {
-      return res.status(403).json({ error: 'Forbidden' });
+      console.log('[INVOICE DOWNLOAD] User not a member of project:', req.user.email, projectId);
+      return res.status(403).json({ error: 'You are not a member of this project' });
     }
     
     const invoice = project.invoices[0];
     if (!invoice) {
+      console.log('[INVOICE DOWNLOAD] Invoice not found:', invoiceId);
       return res.status(404).json({ error: 'Invoice not found' });
     }
     
     if (!invoice.fileUrl) {
-      return res.status(404).json({ error: 'Invoice has no file attached' });
+      console.log('[INVOICE DOWNLOAD] Invoice has no file:', invoiceId);
+      return res.status(404).json({ error: 'This invoice has no file attached' });
     }
     
     // Construct absolute path
     const absolutePath = path.resolve(__dirname, invoice.fileUrl);
+    console.log('[INVOICE DOWNLOAD] Resolved path:', absolutePath);
     
     // Security: ensure the path is within uploads directory
     const uploadsPath = path.resolve(__dirname, uploadDir);
     if (!absolutePath.startsWith(uploadsPath)) {
+      console.log('[INVOICE DOWNLOAD] Path security violation. Expected prefix:', uploadsPath, 'Got:', absolutePath);
       return res.status(403).json({ error: 'Invalid file path' });
     }
     
     // Check if file exists
     if (!fs.existsSync(absolutePath)) {
-      return res.status(404).json({ error: 'File not found' });
+      console.log('[INVOICE DOWNLOAD] File does not exist on disk:', absolutePath);
+      return res.status(404).json({ error: 'File not found on server. It may have been deleted.' });
     }
     
+    console.log('[INVOICE DOWNLOAD] ✅ Sending file:', invoice.fileName);
     // Send the file
     res.download(absolutePath, invoice.fileName || 'invoice.pdf');
   } catch (error) {
     console.error('[ERROR] Failed to download invoice:', error);
-    res.status(500).json({ error: 'Failed to download invoice' });
+    res.status(500).json({ error: 'Failed to download invoice: ' + error.message });
   }
 });
 

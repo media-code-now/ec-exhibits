@@ -46,6 +46,9 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
     try {
       const token = localStorage.getItem('token');
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+      
+      console.log('[INVOICE] Downloading invoice:', invoiceId, 'from project:', projectId);
+      
       const response = await fetch(`${API_URL}/projects/${projectId}/invoices/${invoiceId}/download`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -53,9 +56,16 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Download failed:', response.status, errorText);
-        throw new Error(`Download failed: ${response.status}`);
+        let errorMessage = `Download failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        }
+        console.error('[INVOICE] Download failed:', response.status, errorMessage);
+        throw new Error(errorMessage);
       }
       
       const blob = await response.blob();
@@ -65,11 +75,17 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
       a.download = fileName || `invoice-${invoiceId}.pdf`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      console.log('[INVOICE] ✅ Download successful:', fileName);
+      
+      // Cleanup
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
     } catch (error) {
-      console.error('Download error:', error);
-      alert('Failed to download invoice: ' + error.message);
+      console.error('[INVOICE] Download error:', error);
+      alert('Failed to download invoice:\n\n' + error.message);
     }
   };
 
