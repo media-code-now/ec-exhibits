@@ -2118,11 +2118,12 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
     // Construct absolute path
     const absolutePath = path.resolve(__dirname, invoice.fileUrl);
     console.log('[INVOICE DOWNLOAD] Resolved path:', absolutePath);
+    console.log('[INVOICE DOWNLOAD] uploadDir:', uploadDir);
     
     // Security: ensure the path is within uploads directory
-    const uploadsPath = path.resolve(__dirname, uploadDir);
-    if (!absolutePath.startsWith(uploadsPath)) {
-      console.log('[INVOICE DOWNLOAD] Path security violation. Expected prefix:', uploadsPath, 'Got:', absolutePath);
+    // uploadDir is already an absolute path, so just use it directly
+    if (!absolutePath.startsWith(uploadDir)) {
+      console.log('[INVOICE DOWNLOAD] Path security violation. Expected prefix:', uploadDir, 'Got:', absolutePath);
       return res.status(403).json({ error: 'Invalid file path' });
     }
     
