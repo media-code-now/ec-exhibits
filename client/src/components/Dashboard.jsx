@@ -681,11 +681,17 @@ export function Dashboard({
             </div>
             
             {/* Project Details */}
-            <div className="grid gap-4 pt-4 border-t border-slate-100 md:grid-cols-2">
+            <div className="grid gap-4 pt-4 border-t border-slate-100 md:grid-cols-3">
+              {project.show && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Show</p>
+                  <p className="text-sm font-semibold text-slate-700">{project.show}</p>
+                </div>
+              )}
               {project.size && (
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Booth Size</p>
-                  <p className="text-sm text-slate-700">{project.size}</p>
+                  <p className="text-sm font-semibold text-slate-700">{project.size}</p>
                 </div>
               )}
               {project.moveInDate && (
@@ -701,7 +707,7 @@ export function Dashboard({
                 </div>
               )}
               {project.description && (
-                <div className="md:col-span-2">
+                <div className="md:col-span-3">
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Description</p>
                   <p className="text-sm text-slate-700">{project.description}</p>
                 </div>
