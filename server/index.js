@@ -2411,11 +2411,7 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    // Only allow owner and staff to upload files
-    if (req.user.role !== 'owner' && req.user.role !== 'staff') {
-      return res.status(403).json({ error: 'Only administrators can upload files' });
-    }
-
+    // Allow all project members to upload files
     const meta = JSON.parse(req.body.meta ?? '[]');
     const category = req.body.category || null;
 

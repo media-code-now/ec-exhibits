@@ -745,7 +745,7 @@ export function Dashboard({
 
           {effectiveSection === 'files' && (
             <section className="space-y-8">
-              <ProjectFilesCard projectId={project.id} canUpload={isOwner || isStaff} />
+              <ProjectFilesCard projectId={project.id} canUpload={true} />
             </section>
           )}
 
