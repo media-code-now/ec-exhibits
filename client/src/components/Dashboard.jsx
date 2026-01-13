@@ -765,7 +765,14 @@ export function Dashboard({
 
           {effectiveSection === 'files' && (
             <section className="space-y-8">
-              <ProjectFilesCard projectId={project.id} canUpload={true} />
+              <ProjectFilesCard 
+                projectId={project.id} 
+                canUpload={true}
+                onDeleteFile={(uploadId) => deleteFileMutation.mutate({ 
+                  projectId: project.id, 
+                  uploadId 
+                })}
+              />
             </section>
           )}
 

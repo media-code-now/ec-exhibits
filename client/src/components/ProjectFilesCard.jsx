@@ -41,7 +41,7 @@ function categorizeFile(file) {
   return null; // Don't categorize as 'other'
 }
 
-export function ProjectFilesCard({ projectId, canUpload = false }) {
+export function ProjectFilesCard({ projectId, canUpload = false, onDeleteFile }) {
   const { data } = useQuery({
     queryKey: ['uploads', projectId],
     queryFn: async () => {
@@ -111,6 +111,18 @@ export function ProjectFilesCard({ projectId, canUpload = false }) {
     }
   };
 
+  const handleDelete = file => {
+    if (!onDeleteFile) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${file.fileName}"? This action cannot be undone.`
+    );
+    
+    if (confirmed) {
+      onDeleteFile(file.id);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {FILE_CATEGORIES.map(category => {
@@ -158,6 +170,15 @@ export function ProjectFilesCard({ projectId, canUpload = false }) {
                         >
                           Download
                         </button>
+                        {onDeleteFile && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(file)}
+                            className="rounded-full border border-rose-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </article>
                   ))}
