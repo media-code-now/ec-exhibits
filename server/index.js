@@ -2004,6 +2004,10 @@ app.post('/projects/:projectId/invoices', invoiceUpload.single('file'), authRequ
     const { projectId } = req.params;
     const { type, amount, dueDate, description, status } = req.body;
     
+    console.log('[INVOICE CREATE] User:', req.user?.email, 'Project:', projectId);
+    console.log('[INVOICE CREATE] File uploaded?', !!req.file);
+    console.log('[INVOICE CREATE] Body:', { type, amount, dueDate, description, status });
+    
     // Get project with members
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -2013,12 +2017,16 @@ app.post('/projects/:projectId/invoices', invoiceUpload.single('file'), authRequ
     });
     
     if (!project) {
+      console.log('[INVOICE CREATE] Project not found:', projectId);
       return res.status(404).json({ error: 'Project not found' });
     }
+    
+    console.log('[INVOICE CREATE] Project members:', project.members.length);
     
     // Check if user is owner or staff
     const member = project.members.find(m => m.userId === req.user.id);
     if (!member || member.role === 'client') {
+      console.log('[INVOICE CREATE] User not authorized. Member:', member, 'Role:', member?.role);
       return res.status(403).json({ error: 'Only owners or staff can create invoices' });
     }
     
@@ -2070,7 +2078,11 @@ app.post('/projects/:projectId/invoices', invoiceUpload.single('file'), authRequ
     res.json({ invoice });
   } catch (error) {
     console.error('[ERROR] Failed to create invoice:', error);
-    res.status(500).json({ error: 'Failed to create invoice' });
+    console.error('[ERROR] Error stack:', error.stack);
+    console.error('[ERROR] Request user:', req.user);
+    console.error('[ERROR] Request file:', req.file);
+    console.error('[ERROR] Request body:', req.body);
+    res.status(500).json({ error: 'Failed to create invoice', details: error.message });
   }
 });
 
@@ -2422,6 +2434,11 @@ app.get('/projects/:projectId/uploads', authRequired, async (req, res) => {
 app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, async (req, res) => {
   try {
     const { projectId } = req.params;
+    
+    console.log('[FILE UPLOAD] User:', req.user?.email, 'Project:', projectId);
+    console.log('[FILE UPLOAD] Files count:', req.files?.length || 0);
+    console.log('[FILE UPLOAD] Body meta:', req.body.meta);
+    console.log('[FILE UPLOAD] Category:', req.body.category);
 
     // Check project and membership
     const project = await prisma.project.findUnique({
@@ -2434,12 +2451,16 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
     });
 
     if (!project) {
+      console.log('[FILE UPLOAD] Project not found:', projectId);
       return res.status(404).json({ error: 'Project not found' });
     }
 
     if (project.members.length === 0) {
+      console.log('[FILE UPLOAD] User not a member of project');
       return res.status(403).json({ error: 'Forbidden' });
     }
+
+    console.log('[FILE UPLOAD] User is member, proceeding with upload');
 
     // Allow all project members to upload files
     const meta = JSON.parse(req.body.meta ?? '[]');
@@ -2505,7 +2526,11 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
     res.json({ uploaded: uploads });
   } catch (error) {
     console.error('[ERROR] Failed to upload files:', error);
-    res.status(500).json({ error: 'Failed to upload files' });
+    console.error('[ERROR] Error stack:', error.stack);
+    console.error('[ERROR] Request user:', req.user);
+    console.error('[ERROR] Request files:', req.files?.length || 0);
+    console.error('[ERROR] Request body:', req.body);
+    res.status(500).json({ error: 'Failed to upload files', details: error.message });
   }
 });
 
