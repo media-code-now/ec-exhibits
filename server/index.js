@@ -2431,7 +2431,21 @@ app.get('/projects/:projectId/uploads', authRequired, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    res.json({ uploads: project.uploads });
+    // Map database fields to frontend-expected fields
+    const mappedUploads = project.uploads.map(upload => ({
+      id: upload.id,
+      fileName: upload.originalFilename,
+      uploadedAt: upload.createdAt,
+      uploadedBy: upload.uploader,
+      label: upload.label,
+      remarks: upload.remarks,
+      requiresReview: upload.requiresReview,
+      category: upload.category,
+      isActiveRendering: upload.isActiveRendering,
+      filePath: upload.filePath
+    }));
+    
+    res.json({ uploads: mappedUploads });
   } catch (error) {
     console.error('[ERROR] Failed to fetch uploads:', error);
     res.status(500).json({ error: 'Failed to fetch uploads' });
@@ -2472,24 +2486,30 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
     // Allow all project members to upload files
     const meta = JSON.parse(req.body.meta ?? '[]');
     const category = req.body.category || null;
+    const isActiveRendering = req.body.isActiveRendering === 'true';
+
+    console.log('[FILE UPLOAD] Category:', category);
+    console.log('[FILE UPLOAD] isActiveRendering:', isActiveRendering);
 
     // Create upload records in database
     const uploads = [];
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
+      const filePath = path.relative(__dirname, path.join(uploadDir, file.filename));
+      
+      console.log('[FILE UPLOAD] Creating upload record for:', file.originalname);
+      
       const upload = await prisma.upload.create({
         data: {
           projectId,
           uploaderId: req.user.id,
-          fileName: file.originalname,
-          storedName: file.filename,
-          storagePath: path.relative(__dirname, path.join(uploadDir, file.filename)),
-          size: file.size,
-          contentType: file.mimetype,
+          filePath: filePath,
+          originalFilename: file.originalname,
           label: meta[i]?.label ?? '',
           remarks: meta[i]?.remarks ?? '',
           requiresReview: Boolean(meta[i]?.requiresReview),
-          category: category
+          category: category,
+          isActiveRendering: isActiveRendering
         },
         include: {
           uploader: {
@@ -2541,58 +2561,67 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
   }
 });
 
-app.get('/projects/:projectId/uploads/:uploadId', async (req, res) => {
+app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res) => {
   try {
     const { projectId, uploadId } = req.params;
     
-    // Get project from database with members
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
+    console.log('[FILE DOWNLOAD] User:', req.user.email, 'Upload ID:', uploadId);
+    
+    // Get upload from database
+    const upload = await prisma.upload.findUnique({
+      where: { id: uploadId },
       include: {
-        members: {
-          where: { userId: req.user.id }
+        project: {
+          include: {
+            members: {
+              where: { userId: req.user.id }
+            }
+          }
         }
       }
     });
     
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-    if (project.members.length === 0) {
+    if (!upload) {
+      console.log('[FILE DOWNLOAD] Upload not found:', uploadId);
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    if (!upload.project) {
+      console.log('[FILE DOWNLOAD] Project not found for upload:', uploadId);
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    if (upload.project.members.length === 0) {
+      console.log('[FILE DOWNLOAD] User not a member of project');
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    const bucket = ensureUploadBucket(projectId);
-    const record = bucket.find(item => item.id === uploadId);
-    if (!record) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const absolutePath = path.resolve(uploadDir, record.storedName);
+    const absolutePath = path.resolve(__dirname, upload.filePath);
+    console.log('[FILE DOWNLOAD] File path:', absolutePath);
+    
     const uploadsRoot = path.resolve(uploadDir);
     if (!absolutePath.startsWith(uploadsRoot)) {
+      console.log('[FILE DOWNLOAD] Invalid file path - security check failed');
       return res.status(400).json({ error: 'Invalid file path' });
     }
 
     try {
       await fs.promises.access(absolutePath, fs.constants.R_OK);
+      console.log('[FILE DOWNLOAD] ✅ Sending file:', upload.originalFilename);
       res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, Content-Length');
       res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-      res.download(absolutePath, record.fileName, err => {
+      res.download(absolutePath, upload.originalFilename, err => {
         if (err) {
-          console.error('Download error', err);
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'Unable to download file' });
-          } else {
-            res.end();
-          }
+          console.error('[FILE DOWNLOAD] Error sending file:', err);
         }
       });
     } catch (error) {
-      console.error('Download error', error);
-      res.status(404).json({ error: 'File not found' });
+      console.error('[FILE DOWNLOAD] File not accessible:', error);
+      return res.status(404).json({ error: 'File not found on disk' });
     }
   } catch (error) {
-    console.error('[ERROR] Failed to get upload:', error);
-    res.status(500).json({ error: 'Failed to get upload' });
+    console.error('[ERROR] Failed to download file:', error);
+    res.status(500).json({ error: 'Failed to download file' });
   }
 });
 
