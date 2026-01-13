@@ -180,7 +180,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
         {invoices.map(invoice => (
           <article
             key={invoice.id}
-            className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-slate-200 px-4 py-3"
+            className="flex flex-col gap-3 rounded-xl border border-slate-200 px-4 py-3"
           >
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-slate-800">{invoice.type}</div>
