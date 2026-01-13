@@ -109,9 +109,9 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
 
       {/* Upload Form */}
       {showUploadForm && canEdit && (
-        <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+        <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 min-w-0">
+          <div className="grid grid-cols-2 gap-3 min-w-0">
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
               <select
                 value={formData.type}
@@ -124,7 +124,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
                 <option value="misc">Miscellaneous</option>
               </select>
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
               <input
                 type="number"
@@ -137,7 +137,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
               />
             </div>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
             <input
               type="date"
@@ -146,7 +146,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
             <textarea
               value={formData.description}
@@ -156,7 +156,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
               placeholder="Optional description..."
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="block text-sm font-medium text-slate-700 mb-1">Invoice File (PDF)</label>
             <input
               type="file"

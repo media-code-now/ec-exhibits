@@ -725,7 +725,7 @@ export function Dashboard({
 
           {effectiveSection === 'dashboard' && (
             <section className="grid gap-8 lg:grid-cols-[2fr,1fr]">
-              <div className="space-y-8">
+              <div className="space-y-8 min-w-0">
                 <ProgressStages
                   stages={stages}
                   statuses={statuses}
@@ -735,7 +735,7 @@ export function Dashboard({
                 />
                 <ProjectChat projectId={project.id} token={token} currentUser={user} />
               </div>
-              <div className="space-y-8">
+              <div className="space-y-8 min-w-0">
                 <InvoicesCard
                   invoices={invoices}
                   canEdit={canManageInvoices}
@@ -753,7 +753,7 @@ export function Dashboard({
                   })}
                 />
                 {(isOwner || isStaff) && (
-                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 min-w-0">
                     <h3 className="text-base font-semibold text-slate-900">Upload Display Active Rendering</h3>
                     <p className="mb-4 text-sm text-slate-500">Attach deliverables with Yes/No review flags.</p>
                     <FileDropzone projectId={project.id} isActiveRenderingUpload={true} />

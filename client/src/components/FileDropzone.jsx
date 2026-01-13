@@ -82,34 +82,34 @@ export function FileDropzone({ projectId, isActiveRenderingUpload = false, categ
       {items.length > 0 && (
         <div className="space-y-3">
           {items.map(item => (
-            <article key={item.id} className="bg-white rounded-lg border border-slate-200 p-4 space-y-3 shadow-sm">
-              <header className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-medium text-slate-900">{item.file.name}</p>
+            <article key={item.id} className="bg-white rounded-lg border border-slate-200 p-4 space-y-3 shadow-sm min-w-0">
+              <header className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-900 truncate">{item.file.name}</p>
                   <p className="text-xs text-slate-500">{(item.file.size / 1024).toFixed(1)} KB</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => removeItem(item.id)}
-                  className="text-sm text-rose-600 hover:text-rose-500"
+                  className="text-sm text-rose-600 hover:text-rose-500 flex-shrink-0"
                 >
                   Remove
                 </button>
               </header>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="flex flex-col text-sm text-slate-700 gap-1">
+              <div className="grid gap-3 md:grid-cols-2 min-w-0">
+                <label className="flex flex-col text-sm text-slate-700 gap-1 min-w-0">
                   Label
                   <input
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none w-full"
                     value={item.label}
                     onChange={event => updateItem(item.id, { label: event.target.value })}
                     placeholder="Document type"
                   />
                 </label>
-                <label className="flex flex-col text-sm text-slate-700 gap-1">
+                <label className="flex flex-col text-sm text-slate-700 gap-1 min-w-0">
                   Remarks
                   <input
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none w-full"
                     value={item.remarks}
                     onChange={event => updateItem(item.id, { remarks: event.target.value })}
                     placeholder="Reviewer notes"
