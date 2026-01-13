@@ -267,6 +267,14 @@ export function Dashboard({
     }
   });
 
+  const deleteFileMutation = useMutation({
+    mutationFn: ({ projectId, uploadId }) => 
+      axios.delete(`/projects/${projectId}/uploads/${uploadId}`).then(({ data }) => data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['uploads', project?.id]);
+    }
+  });
+
   const invoices = invoiceResponse?.invoices ?? [];
   const stages = stageResponse?.stages ?? [];
   const statuses = stageResponse?.statuses ?? ['not_started', 'in_progress', 'completed'];
@@ -737,7 +745,13 @@ export function Dashboard({
                   isUpdating={updateInvoiceStatusMutation.isPending}
                   projectId={project.id}
                 />
-                <FilesCard projectId={project.id} />
+                <FilesCard 
+                  projectId={project.id}
+                  onDeleteFile={(uploadId) => deleteFileMutation.mutate({ 
+                    projectId: project.id, 
+                    uploadId 
+                  })}
+                />
                 {(isOwner || isStaff) && (
                   <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
                     <h3 className="text-base font-semibold text-slate-900">Upload Display Active Rendering</h3>

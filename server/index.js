@@ -2625,6 +2625,112 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
   }
 });
 
+// DELETE /projects/:projectId/uploads/:uploadId - Delete an uploaded file
+app.delete('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res) => {
+  const { projectId, uploadId } = req.params;
+  const user = req.user;
+
+  console.log('[DELETE UPLOAD] Request received:', { 
+    projectId, 
+    uploadId, 
+    userId: user.id,
+    userEmail: user.email 
+  });
+
+  try {
+    // Verify project membership
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+
+    if (!project) {
+      console.log('[DELETE UPLOAD] Project not found:', projectId);
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const isMember = project.members.some(member => member.userId === user.id);
+    if (!isMember) {
+      console.log('[DELETE UPLOAD] User not authorized:', { projectId, userId: user.id });
+      return res.status(403).json({ error: 'Not authorized to delete files in this project' });
+    }
+
+    // Get upload record from database
+    const upload = await prisma.upload.findUnique({
+      where: { id: uploadId }
+    });
+
+    if (!upload) {
+      console.log('[DELETE UPLOAD] Upload not found:', uploadId);
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    if (upload.projectId !== projectId) {
+      console.log('[DELETE UPLOAD] Upload does not belong to project:', { 
+        uploadId, 
+        uploadProjectId: upload.projectId, 
+        requestProjectId: projectId 
+      });
+      return res.status(400).json({ error: 'File does not belong to this project' });
+    }
+
+    // Delete file from filesystem
+    const filePath = path.join(uploadDir, upload.filePath);
+    console.log('[DELETE UPLOAD] Attempting to delete file from disk:', filePath);
+
+    try {
+      await fs.promises.unlink(filePath);
+      console.log('[DELETE UPLOAD] File deleted from disk:', filePath);
+    } catch (fsError) {
+      if (fsError.code === 'ENOENT') {
+        console.warn('[DELETE UPLOAD] File not found on disk, continuing with database deletion:', filePath);
+      } else {
+        console.error('[DELETE UPLOAD] Failed to delete file from disk:', fsError);
+        throw fsError;
+      }
+    }
+
+    // Delete database record
+    await prisma.upload.delete({
+      where: { id: uploadId }
+    });
+
+    console.log('[DELETE UPLOAD] Database record deleted:', uploadId);
+
+    // Send notifications to project members
+    const memberIds = project.members.map(m => m.userId).filter(id => id !== user.id);
+    const notifications = memberIds.map(userId => ({
+      userId,
+      projectId,
+      type: 'file_deleted',
+      message: `${user.displayName || user.email} deleted a file: ${upload.originalFilename}`
+    }));
+
+    if (notifications.length > 0) {
+      await prisma.notification.createMany({ data: notifications });
+      console.log('[DELETE UPLOAD] Notifications created:', notifications.length);
+      
+      for (const userId of memberIds) {
+        emitNotificationSummary(userId);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'File deleted successfully',
+      deletedFile: {
+        id: upload.id,
+        fileName: upload.originalFilename
+      }
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to delete file:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
 const httpServer = http.createServer(app);
 io = new Server(httpServer, {
   cors: { origin: corsOriginHandler, credentials: true }

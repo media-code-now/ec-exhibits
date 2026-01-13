@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import axios from 'axios';
 import clsx from 'clsx';
 
-export function FilesCard({ projectId }) {
+export function FilesCard({ projectId, onDeleteFile }) {
   const { data, refetch } = useQuery({
     queryKey: ['uploads', projectId],
     queryFn: async () => {
@@ -61,6 +61,19 @@ export function FilesCard({ projectId }) {
     }
   };
 
+  const handleDelete = async (file) => {
+    if (!window.confirm(`Are you sure you want to delete "${file.fileName}"?`)) {
+      return;
+    }
+    
+    try {
+      await onDeleteFile(file.id);
+    } catch (error) {
+      console.error('Delete failed', error);
+      window.alert('Failed to delete file. Please try again.');
+    }
+  };
+
   return (
     <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200 space-y-4">
       <header>
@@ -105,6 +118,13 @@ export function FilesCard({ projectId }) {
                 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors whitespace-nowrap"
               >
                 Download
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(file)}
+                className="rounded-full border border-rose-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors whitespace-nowrap"
+              >
+                Delete
               </button>
             </div>
           </article>
