@@ -28,7 +28,14 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const uploadDir = path.join(__dirname, 'uploads');
+const invoicesDir = path.join(uploadDir, 'invoices');
+
+// Create upload directories if they don't exist
 fs.mkdirSync(uploadDir, { recursive: true });
+fs.mkdirSync(invoicesDir, { recursive: true });
+
+console.log('[STARTUP] Upload directory:', uploadDir);
+console.log('[STARTUP] Invoices directory:', invoicesDir);
 
 let io;
 
