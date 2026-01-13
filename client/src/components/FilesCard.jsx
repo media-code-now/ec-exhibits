@@ -87,7 +87,7 @@ export function FilesCard({ projectId, onDeleteFile }) {
       
       <div className="space-y-3">
         {activeRenderingFiles.map(file => (
-          <article key={file.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 bg-gradient-to-r from-indigo-50 to-white">
+          <article key={file.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 px-4 py-3 bg-gradient-to-r from-indigo-50 to-white">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-800 truncate break-all" title={file.fileName}>
                 {file.fileName}
@@ -103,7 +103,7 @@ export function FilesCard({ projectId, onDeleteFile }) {
                 <p className="text-xs text-slate-600 mt-1 italic line-clamp-2">{file.remarks}</p>
               )}
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0 self-start sm:self-center">
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className={clsx(
                   'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap',

@@ -180,19 +180,21 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
         {invoices.map(invoice => (
           <article
             key={invoice.id}
-            className="grid grid-cols-[auto,1fr,auto] items-center gap-3 rounded-xl border border-slate-200 px-4 py-3"
+            className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-slate-200 px-4 py-3"
           >
-            <div className="text-sm font-semibold text-slate-800">{invoice.type}</div>
-            <div className="text-sm text-slate-500">
-              <p>
-                Due {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'} · ${invoice.amount}
-              </p>
-              {invoice.description && <p className="text-xs text-slate-400">{invoice.description}</p>}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-slate-800">{invoice.type}</div>
+              <div className="text-sm text-slate-500">
+                <p>
+                  Due {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'} · ${invoice.amount}
+                </p>
+                {invoice.description && <p className="text-xs text-slate-400 truncate">{invoice.description}</p>}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span
                 className={clsx(
-                  'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold',
+                  'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap',
                   invoice.status === 'paid'
                     ? 'bg-emerald-100 text-emerald-700'
                     : invoice.status === 'pending'
@@ -206,7 +208,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
                 <button
                   type="button"
                   onClick={() => handleDownload(invoice.id, invoice.fileName)}
-                  className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-200 transition"
+                  className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-200 transition whitespace-nowrap"
                 >
                   📥 Download
                 </button>
@@ -217,7 +219,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
                     type="button"
                     onClick={() => onTogglePayment?.(invoice)}
                     className={clsx(
-                      'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide transition',
+                      'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide transition whitespace-nowrap',
                       invoice.status === 'paid'
                         ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         : 'bg-indigo-600 text-white hover:bg-indigo-500'
@@ -233,7 +235,7 @@ export function InvoicesCard({ invoices = [], canEdit = false, onTogglePayment, 
                         onDeleteInvoice?.(invoice.id);
                       }
                     }}
-                    className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-200 transition"
+                    className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-200 transition whitespace-nowrap"
                     title="Delete invoice"
                   >
                     🗑️ Delete
