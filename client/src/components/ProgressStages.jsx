@@ -14,6 +14,22 @@ const taskLabelMap = {
   completed: 'Completed'
 };
 
+// Helper function to format date from database to YYYY-MM-DD for input fields
+// This avoids timezone issues by treating the date as local
+const formatDateForInput = (dateString) => {
+  if (!dateString) return '';
+  // If it's already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString;
+  }
+  // Parse as ISO string and extract date part without timezone conversion
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Helper function to get default due date (7 days from today)
 const getDefaultDueDate = () => {
   const date = new Date();
@@ -74,7 +90,7 @@ export function ProgressStages({
       id: task.id,
       stageId: task.stageId,
       title: task.title,
-      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      dueDate: task.dueDate ? formatDateForInput(task.dueDate) : '',
       assignee: task.assignee || ''
     });
   };

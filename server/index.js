@@ -1626,11 +1626,15 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
     // Set default due date if not provided (7 days from today)
     let taskDueDate = null;
     if (dueDate) {
-      taskDueDate = new Date(dueDate);
+      // Parse date string as UTC midnight to avoid timezone shifts
+      // Input format is YYYY-MM-DD from date input
+      const [year, month, day] = dueDate.split('-').map(Number);
+      taskDueDate = new Date(Date.UTC(year, month - 1, day));
     } else {
-      // Default: 7 days from now
+      // Default: 7 days from now at UTC midnight
       const defaultDate = new Date();
-      defaultDate.setDate(defaultDate.getDate() + 7);
+      defaultDate.setUTCDate(defaultDate.getUTCDate() + 7);
+      defaultDate.setUTCHours(0, 0, 0, 0);
       taskDueDate = defaultDate;
     }
 
@@ -1694,7 +1698,15 @@ app.patch('/projects/:projectId/stages/:stageId/tasks/:taskId', authRequired, as
     // Build update data object with only provided fields
     const updateData = {};
     if (taskState) updateData.state = taskState;
-    if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
+    if (dueDate !== undefined) {
+      if (dueDate) {
+        // Parse date string as UTC midnight to avoid timezone shifts
+        const [year, month, day] = dueDate.split('-').map(Number);
+        updateData.dueDate = new Date(Date.UTC(year, month - 1, day));
+      } else {
+        updateData.dueDate = null;
+      }
+    }
     if (title !== undefined) updateData.title = title.trim();
     if (assignee !== undefined) updateData.assignee = assignee || null;
 
