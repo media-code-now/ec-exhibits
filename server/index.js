@@ -639,8 +639,8 @@ const invoiceUpload = multer({ storage: invoiceStorage });
 
 app.get('/users', authRequired, async (req, res) => {
   try {
-    if (req.user.role !== 'owner') {
-      return res.status(403).json({ error: 'Only owners can view users' });
+    if (!['owner', 'project_manager'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only owners and project managers can view users' });
     }
 
     // Get all users from database
@@ -655,9 +655,9 @@ app.get('/users', authRequired, async (req, res) => {
 
 app.post('/users', authRequired, async (req, res) => {
   try {
-    // Only owners can create users
-    if (req.user.role !== 'owner') {
-      return res.status(403).json({ error: 'Only owners can create users' });
+    // Only owners and project managers can create users
+    if (!['owner', 'project_manager'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only owners and project managers can create users' });
     }
 
     const { displayName, role, email } = req.body ?? {};
@@ -667,7 +667,7 @@ app.post('/users', authRequired, async (req, res) => {
       return res.status(400).json({ error: 'Display name and email are required' });
     }
 
-    if (!['owner', 'staff', 'client'].includes(role)) {
+    if (!['owner', 'project_manager', 'staff', 'client'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }
 

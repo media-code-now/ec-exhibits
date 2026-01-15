@@ -9,7 +9,7 @@ const SALT_ROUNDS = 10;
  * @param {string} userData.email - User email
  * @param {string} userData.password - Plain text password
  * @param {string} userData.displayName - User display name
- * @param {string} userData.role - User role (owner, staff, client)
+ * @param {string} userData.role - User role (owner, project_manager, staff, client)
  * @returns {Promise<Object>} Created user (without password_hash)
  */
 export async function registerUser({ email, password, displayName, role = 'client' }) {
@@ -18,8 +18,8 @@ export async function registerUser({ email, password, displayName, role = 'clien
     throw new Error('Email, password, and display name are required');
   }
 
-  if (!['owner', 'staff', 'client'].includes(role)) {
-    throw new Error('Invalid role. Must be owner, staff, or client');
+  if (!['owner', 'project_manager', 'staff', 'client'].includes(role)) {
+    throw new Error('Invalid role. Must be owner, project_manager, staff, or client');
   }
 
   // Check if user already exists

@@ -16,7 +16,7 @@ model User {
   email         String    @unique
   passwordHash  String    @map("password_hash")
   displayName   String    @map("display_name")
-  role          String    // 'owner', 'staff', 'client'
+  role          String    // 'owner', 'project_manager', 'staff', 'client'
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -59,7 +59,7 @@ model ProjectMember {
   id        String   @id @default(uuid()) @db.Uuid
   projectId String   @map("project_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  role      String   // 'owner', 'staff', 'client'
+  role      String   // 'owner', 'project_manager', 'staff', 'client'
   joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
 
   // Relations

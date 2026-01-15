@@ -73,6 +73,7 @@ export function Dashboard({
 }) {
   const queryClient = useQueryClient();
   const isOwner = user.role === 'owner';
+  const isProjectManager = user.role === 'project_manager';
   const isStaff = user.role === 'staff';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -197,7 +198,7 @@ export function Dashboard({
       const { data } = await axios.get('/users');
       return data;
     },
-    enabled: isOwner
+    enabled: isOwner || isProjectManager
   });
 
   const [createForm, setCreateForm] = useState({
@@ -280,7 +281,7 @@ export function Dashboard({
   const statuses = stageResponse?.statuses ?? ['not_started', 'in_progress', 'completed'];
   const taskStatuses = stageResponse?.taskStatuses ?? ['not_started', 'in_progress', 'blocked', 'completed'];
   const progressSummary = stageResponse?.progress;
-  const canManageChecklist = isOwner || isStaff;
+  const canManageChecklist = isOwner || isProjectManager || isStaff;
 
   // Collect all overdue tasks from all stages with stage names
   const allOverdueTasks = useMemo(() => {
@@ -306,7 +307,7 @@ export function Dashboard({
     [directory]
   );
   const staff = useMemo(
-    () => directory.filter(candidate => candidate.role === 'staff'),
+    () => directory.filter(candidate => ['staff', 'project_manager'].includes(candidate.role)),
     [directory]
   );
 
@@ -379,7 +380,8 @@ export function Dashboard({
   };
 
   const handleDeleteUser = directoryUser => {
-    if (directoryUser.role === 'owner' || deleteUserMutation.isPending) return;
+    // Only owners can delete users
+    if (!isOwner || directoryUser.role === 'owner' || deleteUserMutation.isPending) return;
     const confirmed = window.confirm(
       `Delete ${directoryUser.displayName} from the portal? They will be removed from all projects.`
     );
@@ -412,34 +414,38 @@ export function Dashboard({
 
   const navItems = useMemo(() => {
     const items = [{ key: 'dashboard', label: 'Dashboard' }];
-    if (isOwner) {
+    if (isOwner || isProjectManager) {
       items.push({ key: 'projects', label: 'Projects' });
     }
     items.push({ key: 'files', label: 'Project Files' });
-    if (isOwner || isStaff) {
+    if (isOwner || isProjectManager || isStaff) {
       items.push({ key: 'checklist', label: 'Checklist' });
     }
-    if (isOwner) {
+    if (isOwner || isProjectManager) {
       items.push({ key: 'template', label: 'Template' });
       items.push({ key: 'users', label: 'Users' });
+    }
+    if (isOwner) {
       items.push({ key: 'manage-projects', label: 'Manage Projects' });
     }
     return items;
-  }, [isOwner, isStaff]);
+  }, [isOwner, isProjectManager, isStaff]);
 
   const allowedSections = useMemo(() => {
     const set = new Set(['dashboard', 'files']);
-    if (isOwner || isStaff) {
+    if (isOwner || isProjectManager || isStaff) {
       set.add('checklist');
     }
-    if (isOwner) {
+    if (isOwner || isProjectManager) {
       set.add('projects');
       set.add('template');
       set.add('users');
+    }
+    if (isOwner) {
       set.add('manage-projects');
     }
     return set;
-  }, [isOwner, isStaff]);
+  }, [isOwner, isProjectManager, isStaff]);
 
   useEffect(() => {
     if (!allowedSections.has(activeSection)) {
@@ -921,6 +927,7 @@ export function Dashboard({
                     >
                       <option value="client">Client</option>
                       <option value="staff">Staff</option>
+                      <option value="project_manager">Project Manager</option>
                     </select>
                   </label>
                   <button
@@ -996,14 +1003,16 @@ export function Dashboard({
                                     {inviteMutation.isPending ? 'Assigning…' : 'Assign'}
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteUser(client)}
-                                  className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50"
-                                  disabled={deleteUserMutation.isPending || client.role === 'owner'}
-                                >
-                                  {deleteUserMutation.isPending ? 'Deleting…' : 'Delete'}
-                                </button>
+                                {isOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteUser(client)}
+                                    className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50"
+                                    disabled={deleteUserMutation.isPending || client.role === 'owner'}
+                                  >
+                                    {deleteUserMutation.isPending ? 'Deleting…' : 'Delete'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                             {generatedPassword && (
@@ -1078,14 +1087,16 @@ export function Dashboard({
                                     {inviteMutation.isPending ? 'Assigning…' : 'Assign'}
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteUser(member)}
-                                  className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50"
-                                  disabled={deleteUserMutation.isPending || member.role === 'owner'}
-                                >
-                                  {deleteUserMutation.isPending ? 'Deleting…' : 'Delete'}
-                                </button>
+                                {isOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteUser(member)}
+                                    className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-600 hover:bg-rose-50"
+                                    disabled={deleteUserMutation.isPending || member.role === 'owner'}
+                                  >
+                                    {deleteUserMutation.isPending ? 'Deleting…' : 'Delete'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                             {generatedPassword && (

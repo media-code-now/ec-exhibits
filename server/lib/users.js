@@ -1,5 +1,13 @@
 import { randomUUID } from 'crypto';
 
+const mockUsers = [
+  { id: 'user-owner', displayName: 'Olivia Owner', role: 'owner', email: 'olivia.owner@example.com' },
+  { id: 'user-staff', displayName: 'Samuel Staff', role: 'staff', email: 'samuel.staff@example.com' },
+  { id: 'user-staff-2', displayName: 'Skyler Staff', role: 'staff', email: 'skyler.staff@example.com' },
+  { id: 'user-client', displayName: 'Cameron Client', role: 'client', email: 'cameron.client@example.com' },
+  { id: 'user-client-2', displayName: 'Callie Client', role: 'client', email: 'callie.client@example.com' }
+];
+
 const userStore = [
   { id: 'user-owner', displayName: 'Olivia Owner', role: 'owner', email: 'olivia.owner@example.com' },
   { id: 'user-staff', displayName: 'Samuel Staff', role: 'staff', email: 'samuel.staff@example.com' },
@@ -8,7 +16,7 @@ const userStore = [
   { id: 'user-client-2', displayName: 'Callie Client', role: 'client', email: 'callie.client@example.com' }
 ];
 
-const allowedRoles = new Set(['owner', 'staff', 'client']);
+const allowedRoles = new Set(['owner', 'project_manager', 'staff', 'client']);
 
 export function listUsers() {
   return userStore.map(user => ({ ...user }));
