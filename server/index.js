@@ -444,6 +444,93 @@ app.post('/projects', authRequired, async (req, res) => {
   }
 });
 
+// PUT /projects/:projectId - Update project details
+app.put('/projects/:projectId', authRequired, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user.id;
+    const { name, show, size, moveInDate, openingDay, description } = req.body;
+
+    console.log('[PROJECT UPDATE] Request to update project:', projectId, 'by user:', req.user.email);
+
+    // Verify the project exists and user is a member
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        members: true
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Project not found' 
+      });
+    }
+
+    // Check if user is owner or project manager
+    const membership = project.members.find(m => m.userId === userId);
+    const canEdit = membership && ['owner', 'project_manager'].includes(req.user.role);
+    
+    if (!canEdit) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Only owners and project managers can edit project details' 
+      });
+    }
+
+    // Prepare update data
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (show !== undefined) updateData.show = show || null;
+    if (size !== undefined) updateData.size = size || null;
+    if (description !== undefined) updateData.description = description || null;
+    
+    // Handle dates
+    if (moveInDate !== undefined) {
+      updateData.moveInDate = moveInDate ? new Date(moveInDate) : null;
+    }
+    if (openingDay !== undefined) {
+      updateData.openingDay = openingDay ? new Date(openingDay) : null;
+    }
+
+    console.log('[INFO] Updating project with data:', updateData);
+
+    // Update the project
+    const updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data: updateData,
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                role: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    console.log('[SUCCESS] Project updated successfully');
+
+    res.json({ 
+      success: true, 
+      project: updatedProject 
+    });
+  } catch (error) {
+    console.error('[ERROR] Failed to update project:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to update project' 
+    });
+  }
+});
+
 // DELETE /projects/:projectId - Delete a project and all related data
 app.delete('/projects/:projectId', authRequired, async (req, res) => {
   try {

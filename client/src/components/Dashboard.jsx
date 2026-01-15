@@ -212,6 +212,15 @@ export function Dashboard({
     staffIds: []
   });
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  const [editProjectForm, setEditProjectForm] = useState({
+    name: '',
+    show: '',
+    size: '',
+    moveInDate: '',
+    openingDay: '',
+    description: ''
+  });
   const [generatedPasswords, setGeneratedPasswords] = useState({});
   const [passwordNotices, setPasswordNotices] = useState({});
   const [inviteUserId, setInviteUserId] = useState('');
@@ -265,6 +274,15 @@ export function Dashboard({
       updatedProjects.forEach(updatedProject => {
         onProjectUpdated?.(updatedProject);
       });
+    }
+  });
+
+  const updateProjectMutation = useMutation({
+    mutationFn: ({ projectId, updates }) =>
+      axios.put(`/projects/${projectId}`, updates).then(({ data }) => data.project),
+    onSuccess: updatedProject => {
+      onProjectUpdated?.(updatedProject);
+      setIsEditingProject(false);
     }
   });
 
@@ -377,6 +395,40 @@ export function Dashboard({
   const handleRemoveFromProject = user => {
     if (!memberIds.has(user.id) || removeMemberMutation.isPending) return;
     removeMemberMutation.mutate(user.id);
+  };
+
+  const handleEditProject = () => {
+    setEditProjectForm({
+      name: project.name || '',
+      show: project.show || '',
+      size: project.size || '',
+      moveInDate: project.moveInDate ? project.moveInDate.split('T')[0] : '',
+      openingDay: project.openingDay ? project.openingDay.split('T')[0] : '',
+      description: project.description || ''
+    });
+    setIsEditingProject(true);
+  };
+
+  const handleCancelEditProject = () => {
+    setIsEditingProject(false);
+    setEditProjectForm({
+      name: '',
+      show: '',
+      size: '',
+      moveInDate: '',
+      openingDay: '',
+      description: ''
+    });
+  };
+
+  const handleUpdateProjectSubmit = event => {
+    event.preventDefault();
+    if (!editProjectForm.name.trim()) return;
+    
+    updateProjectMutation.mutate({
+      projectId: project.id,
+      updates: editProjectForm
+    });
   };
 
   const handleDeleteUser = directoryUser => {
@@ -681,52 +733,151 @@ export function Dashboard({
                 <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Active Project</p>
                 <p className="text-lg font-semibold text-slate-900">{project.name}</p>
               </div>
-              <select
-                value={project.id}
-                onChange={event => onProjectChange(event.target.value)}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 focus:border-indigo-500 focus:outline-none"
-              >
-                {projects.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                {(isOwner || isProjectManager) && !isEditingProject && (
+                  <button
+                    onClick={handleEditProject}
+                    className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-100 transition-colors"
+                  >
+                    Edit Project
+                  </button>
+                )}
+                <select
+                  value={project.id}
+                  onChange={event => onProjectChange(event.target.value)}
+                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 focus:border-indigo-500 focus:outline-none"
+                >
+                  {projects.map(option => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             
-            {/* Project Details */}
-            <div className="grid gap-4 pt-4 border-t border-slate-100 md:grid-cols-3">
-              {project.show && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Show</p>
-                  <p className="text-sm font-semibold text-slate-700">{project.show}</p>
+            {/* Edit Project Form */}
+            {isEditingProject ? (
+              <form onSubmit={handleUpdateProjectSubmit} className="pt-4 border-t border-slate-100">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="flex flex-col gap-2 text-sm text-slate-700">
+                    Project Name *
+                    <input
+                      type="text"
+                      value={editProjectForm.name}
+                      onChange={e => setEditProjectForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      placeholder="Trade show booth"
+                      required
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm text-slate-700">
+                    Show
+                    <input
+                      type="text"
+                      value={editProjectForm.show}
+                      onChange={e => setEditProjectForm(prev => ({ ...prev, show: e.target.value }))}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      placeholder="CES 2024"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm text-slate-700">
+                    Booth Size
+                    <input
+                      type="text"
+                      value={editProjectForm.size}
+                      onChange={e => setEditProjectForm(prev => ({ ...prev, size: e.target.value }))}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      placeholder="20x20"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm text-slate-700">
+                    Move-In Date
+                    <input
+                      type="date"
+                      value={editProjectForm.moveInDate}
+                      onChange={e => setEditProjectForm(prev => ({ ...prev, moveInDate: e.target.value }))}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm text-slate-700">
+                    Opening Day
+                    <input
+                      type="date"
+                      value={editProjectForm.openingDay}
+                      onChange={e => setEditProjectForm(prev => ({ ...prev, openingDay: e.target.value }))}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-sm text-slate-700 md:col-span-2">
+                    Description
+                    <textarea
+                      value={editProjectForm.description}
+                      onChange={e => setEditProjectForm(prev => ({ ...prev, description: e.target.value }))}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      placeholder="Project details..."
+                      rows="3"
+                    />
+                  </label>
                 </div>
-              )}
-              {project.size && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Booth Size</p>
-                  <p className="text-sm font-semibold text-slate-700">{project.size}</p>
+                <div className="flex items-center gap-3 mt-4">
+                  <button
+                    type="submit"
+                    disabled={updateProjectMutation.isPending || !editProjectForm.name.trim()}
+                    className={clsx(
+                      'rounded-full px-5 py-2 text-sm font-semibold text-white shadow-sm transition',
+                      updateProjectMutation.isPending || !editProjectForm.name.trim()
+                        ? 'bg-indigo-300 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-500'
+                    )}
+                  >
+                    {updateProjectMutation.isPending ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelEditProject}
+                    disabled={updateProjectMutation.isPending}
+                    className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
                 </div>
-              )}
-              {project.moveInDate && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Move-In Date</p>
-                  <p className="text-sm text-slate-700">
-                    {new Date(project.moveInDate).toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </p>
-                </div>
-              )}
-              {project.description && (
-                <div className="md:col-span-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Description</p>
-                  <p className="text-sm text-slate-700">{project.description}</p>
-                </div>
-              )}
-            </div>
+              </form>
+            ) : (
+              /* Project Details */
+              <div className="grid gap-4 pt-4 border-t border-slate-100 md:grid-cols-3">
+                {project.show && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Show</p>
+                    <p className="text-sm font-semibold text-slate-700">{project.show}</p>
+                  </div>
+                )}
+                {project.size && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Booth Size</p>
+                    <p className="text-sm font-semibold text-slate-700">{project.size}</p>
+                  </div>
+                )}
+                {project.moveInDate && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Move-In Date</p>
+                    <p className="text-sm text-slate-700">
+                      {new Date(project.moveInDate).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </p>
+                  </div>
+                )}
+                {project.description && (
+                  <div className="md:col-span-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">Description</p>
+                    <p className="text-sm text-slate-700">{project.description}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {effectiveSection === 'dashboard' && (
