@@ -4,11 +4,31 @@ export function OverdueAlert({ tasks = [], invoices = [], onDismiss }) {
   const [isVisible, setIsVisible] = useState(false);
   const [hasBeenDismissed, setHasBeenDismissed] = useState(false);
 
-  // Filter overdue items
-  const overdueTasks = tasks.filter(task => task.isOverdue && task.state !== 'completed');
+  // Filter overdue items (show alerts 1 day before due date)
+  const overdueTasks = tasks.filter(task => {
+    if (task.state === 'completed' || !task.dueDate) return false;
+    const dueDate = new Date(task.dueDate);
+    const today = new Date();
+    // Set both to start of day for accurate comparison
+    dueDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    // Calculate days difference
+    const daysDiff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+    // Show alert if due tomorrow or already overdue (daysDiff <= 1)
+    return daysDiff <= 1 && (task.isOverdue || daysDiff <= 1);
+  });
+  
   const overdueInvoices = invoices.filter(invoice => {
     if (invoice.status === 'paid' || !invoice.dueDate) return false;
-    return new Date(invoice.dueDate) < new Date();
+    const dueDate = new Date(invoice.dueDate);
+    const today = new Date();
+    // Set both to start of day for accurate comparison
+    dueDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    // Calculate days difference
+    const daysDiff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+    // Show alert if due tomorrow or already overdue (daysDiff <= 1)
+    return daysDiff <= 1;
   });
 
   const hasOverdueItems = overdueTasks.length > 0 || overdueInvoices.length > 0;
@@ -58,8 +78,8 @@ export function OverdueAlert({ tasks = [], invoices = [], onDismiss }) {
                 <span className="text-3xl">⚠️</span>
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Overdue Items Alert!</h2>
-                <p className="text-rose-100 text-sm">Action required immediately</p>
+                <h2 className="text-2xl font-bold">Urgent Items Alert!</h2>
+                <p className="text-rose-100 text-sm">Items due tomorrow or overdue</p>
               </div>
             </div>
             <button
@@ -80,23 +100,32 @@ export function OverdueAlert({ tasks = [], invoices = [], onDismiss }) {
               <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
                 <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
                   <span>📋</span>
-                  <span>Overdue Tasks ({overdueTasks.length})</span>
+                  <span>Urgent Tasks ({overdueTasks.length})</span>
                 </h3>
                 <ul className="space-y-2">
-                  {overdueTasks.map((task) => (
-                    <li
-                      key={task.id}
-                      className="bg-white/10 rounded-lg p-3 hover:bg-white/20 transition"
-                    >
-                      <p className="font-medium">{task.title}</p>
-                      <p className="text-sm text-rose-100 mt-1">
-                        Stage: {task.stageName || 'Unknown'} • Due: {new Date(task.dueDate).toLocaleDateString()}
-                      </p>
-                      {task.assignee && (
-                        <p className="text-xs text-rose-100 mt-1">Assigned to: {task.assignee}</p>
-                      )}
-                    </li>
-                  ))}
+                  {overdueTasks.map((task) => {
+                    const dueDate = new Date(task.dueDate);
+                    const today = new Date();
+                    dueDate.setHours(0, 0, 0, 0);
+                    today.setHours(0, 0, 0, 0);
+                    const daysDiff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                    const dueDateLabel = daysDiff === 1 ? 'Due Tomorrow' : daysDiff === 0 ? 'Due Today' : 'Overdue';
+                    
+                    return (
+                      <li
+                        key={task.id}
+                        className="bg-white/10 rounded-lg p-3 hover:bg-white/20 transition"
+                      >
+                        <p className="font-medium">{task.title}</p>
+                        <p className="text-sm text-rose-100 mt-1">
+                          Stage: {task.stageName || 'Unknown'} • {dueDateLabel}: {new Date(task.dueDate).toLocaleDateString()}
+                        </p>
+                        {task.assignee && (
+                          <p className="text-xs text-rose-100 mt-1">Assigned to: {task.assignee}</p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -106,20 +135,29 @@ export function OverdueAlert({ tasks = [], invoices = [], onDismiss }) {
               <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
                 <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
                   <span>💰</span>
-                  <span>Overdue Invoices ({overdueInvoices.length})</span>
+                  <span>Urgent Invoices ({overdueInvoices.length})</span>
                 </h3>
                 <ul className="space-y-2">
-                  {overdueInvoices.map((invoice) => (
-                    <li
-                      key={invoice.id}
-                      className="bg-white/10 rounded-lg p-3 hover:bg-white/20 transition"
-                    >
-                      <p className="font-medium">{invoice.description || `Invoice #${invoice.invoiceNumber}`}</p>
-                      <p className="text-sm text-rose-100 mt-1">
-                        Amount: ${invoice.amount} • Due: {new Date(invoice.dueDate).toLocaleDateString()}
-                      </p>
-                    </li>
-                  ))}
+                  {overdueInvoices.map((invoice) => {
+                    const dueDate = new Date(invoice.dueDate);
+                    const today = new Date();
+                    dueDate.setHours(0, 0, 0, 0);
+                    today.setHours(0, 0, 0, 0);
+                    const daysDiff = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                    const dueDateLabel = daysDiff === 1 ? 'Due Tomorrow' : daysDiff === 0 ? 'Due Today' : 'Overdue';
+                    
+                    return (
+                      <li
+                        key={invoice.id}
+                        className="bg-white/10 rounded-lg p-3 hover:bg-white/20 transition"
+                      >
+                        <p className="font-medium">{invoice.description || `Invoice #${invoice.invoiceNumber}`}</p>
+                        <p className="text-sm text-rose-100 mt-1">
+                          Amount: ${invoice.amount} • {dueDateLabel}: {new Date(invoice.dueDate).toLocaleDateString()}
+                        </p>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
