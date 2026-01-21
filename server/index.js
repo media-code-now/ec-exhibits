@@ -2233,15 +2233,21 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
       return res.status(404).json({ error: 'This invoice has no file attached' });
     }
     
-    // Construct absolute path
-    const absolutePath = path.resolve(__dirname, invoice.fileUrl);
+    // Construct absolute path - fileUrl is like 'uploads/invoices/filename.pdf'
+    // Remove 'uploads/' prefix if it exists since we'll use uploadDir
+    let relativePath = invoice.fileUrl;
+    if (relativePath.startsWith('uploads/')) {
+      relativePath = relativePath.substring('uploads/'.length);
+    }
+    const absolutePath = path.join(uploadDir, relativePath);
     console.log('[INVOICE DOWNLOAD] Resolved path:', absolutePath);
     console.log('[INVOICE DOWNLOAD] uploadDir:', uploadDir);
     
     // Security: ensure the path is within uploads directory
-    // uploadDir is already an absolute path, so just use it directly
-    if (!absolutePath.startsWith(uploadDir)) {
-      console.log('[INVOICE DOWNLOAD] Path security violation. Expected prefix:', uploadDir, 'Got:', absolutePath);
+    const resolvedPath = path.resolve(absolutePath);
+    const uploadsRoot = path.resolve(uploadDir);
+    if (!resolvedPath.startsWith(uploadsRoot)) {
+      console.log('[INVOICE DOWNLOAD] Path security violation. Expected prefix:', uploadsRoot, 'Got:', resolvedPath);
       return res.status(403).json({ error: 'Invalid file path' });
     }
     
@@ -2594,7 +2600,8 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
     const uploads = [];
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
-      const filePath = path.relative(__dirname, path.join(uploadDir, file.filename));
+      // Store only the filename, we'll prepend uploadDir when accessing
+      const filePath = file.filename;
       
       console.log('[FILE UPLOAD] Creating upload record for:', file.originalname);
       
@@ -2695,11 +2702,13 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    const absolutePath = path.resolve(__dirname, upload.filePath);
+    // Construct absolute path - upload.filePath is just the filename
+    const absolutePath = path.join(uploadDir, upload.filePath);
     console.log('[FILE DOWNLOAD] File path:', absolutePath);
     
     const uploadsRoot = path.resolve(uploadDir);
-    if (!absolutePath.startsWith(uploadsRoot)) {
+    const resolvedPath = path.resolve(absolutePath);
+    if (!resolvedPath.startsWith(uploadsRoot)) {
       console.log('[FILE DOWNLOAD] Invalid file path - security check failed');
       return res.status(400).json({ error: 'Invalid file path' });
     }
