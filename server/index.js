@@ -2911,6 +2911,7 @@ app.delete('/projects/:projectId/uploads/:uploadId', authRequired, async (req, r
       userId,
       projectId,
       type: 'file_deleted',
+      title: 'File Deleted',
       message: `${user.displayName || user.email} deleted a file: ${upload.originalFilename}`
     }));
 
