@@ -2733,10 +2733,15 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
     let absolutePath;
     const pathsToTry = [];
     
-    // Option 1: New format - just filename
+    // Option 1: Old format - path is relative to __dirname and includes 'uploads/' prefix
+    if (upload.filePath.startsWith('uploads/')) {
+      pathsToTry.push(path.join(__dirname, upload.filePath));
+    }
+    
+    // Option 2: New format - just filename, join with uploadDir
     pathsToTry.push(path.join(uploadDir, upload.filePath));
     
-    // Option 2: Old format - already includes 'uploads/' prefix
+    // Option 3: Old format alternative - strip 'uploads/' and join with uploadDir
     if (upload.filePath.startsWith('uploads/')) {
       const withoutUploads = upload.filePath.substring('uploads/'.length);
       pathsToTry.push(path.join(uploadDir, withoutUploads));
@@ -2744,6 +2749,7 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
     
     console.log('[FILE DOWNLOAD] Original filePath:', upload.filePath);
     console.log('[FILE DOWNLOAD] uploadDir:', uploadDir);
+    console.log('[FILE DOWNLOAD] __dirname:', __dirname);
     console.log('[FILE DOWNLOAD] Trying paths:', pathsToTry);
     
     const uploadsRoot = path.resolve(uploadDir);
@@ -2765,6 +2771,7 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
         break;
       } catch {
         // File doesn't exist at this path, try next
+        console.log('[FILE DOWNLOAD] File not found at:', resolvedPath);
       }
     }
     
