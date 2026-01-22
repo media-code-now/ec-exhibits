@@ -2271,8 +2271,10 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
     for (const tryPath of pathsToTry) {
       const resolvedPath = path.resolve(tryPath);
       
-      // Security check
-      if (!resolvedPath.startsWith(uploadsRoot)) {
+      // Security check - path must be within uploads directory
+      // This works for both __dirname/uploads and uploadDir based paths
+      if (!resolvedPath.includes(path.sep + 'uploads' + path.sep) && 
+          !resolvedPath.endsWith(path.sep + 'uploads')) {
         console.log('[INVOICE DOWNLOAD] Path security violation, skipping:', resolvedPath);
         continue;
       }
@@ -2767,8 +2769,10 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
     for (const tryPath of pathsToTry) {
       const resolvedPath = path.resolve(tryPath);
       
-      // Security check
-      if (!resolvedPath.startsWith(uploadsRoot)) {
+      // Security check - path must be within uploads directory
+      // This works for both __dirname/uploads and uploadDir based paths
+      if (!resolvedPath.includes(path.sep + 'uploads' + path.sep) && 
+          !resolvedPath.endsWith(path.sep + 'uploads')) {
         console.log('[FILE DOWNLOAD] Path security violation, skipping:', resolvedPath);
         continue;
       }
@@ -2894,6 +2898,7 @@ app.delete('/projects/:projectId/uploads/:uploadId', authRequired, async (req, r
     }
 
     // Delete database record
+    console.log('[DELETE UPLOAD] Deleting database record for uploadId:', uploadId);
     await prisma.upload.delete({
       where: { id: uploadId }
     });
@@ -2908,6 +2913,8 @@ app.delete('/projects/:projectId/uploads/:uploadId', authRequired, async (req, r
       type: 'file_deleted',
       message: `${user.displayName || user.email} deleted a file: ${upload.originalFilename}`
     }));
+
+    console.log('[DELETE UPLOAD] Preparing notifications:', notifications);
 
     if (notifications.length > 0) {
       await prisma.notification.createMany({ data: notifications });
@@ -2928,7 +2935,12 @@ app.delete('/projects/:projectId/uploads/:uploadId', authRequired, async (req, r
     });
   } catch (error) {
     console.error('[ERROR] Failed to delete file:', error);
-    res.status(500).json({ error: 'Failed to delete file' });
+    console.error('[ERROR] Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({ error: 'Failed to delete file', details: error.message });
   }
 });
 
