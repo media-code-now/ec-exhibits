@@ -2233,27 +2233,52 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
       return res.status(404).json({ error: 'This invoice has no file attached' });
     }
     
-    // Construct absolute path - fileUrl is like 'uploads/invoices/filename.pdf'
-    // Remove 'uploads/' prefix if it exists since we'll use uploadDir
-    let relativePath = invoice.fileUrl;
-    if (relativePath.startsWith('uploads/')) {
-      relativePath = relativePath.substring('uploads/'.length);
+    // Construct absolute path - handle both old and new path formats
+    // Old format: 'uploads/invoices/filename.pdf'
+    // New format: 'invoices/filename.pdf' or just 'filename.pdf'
+    let absolutePath;
+    
+    // Try different path combinations
+    const pathsToTry = [];
+    
+    // Option 1: fileUrl is already a complete relative path from uploads/
+    if (invoice.fileUrl.startsWith('uploads/')) {
+      const withoutUploads = invoice.fileUrl.substring('uploads/'.length);
+      pathsToTry.push(path.join(uploadDir, withoutUploads));
     }
-    const absolutePath = path.join(uploadDir, relativePath);
-    console.log('[INVOICE DOWNLOAD] Resolved path:', absolutePath);
+    
+    // Option 2: fileUrl is relative from uploadDir (like 'invoices/filename.pdf')
+    pathsToTry.push(path.join(uploadDir, invoice.fileUrl));
+    
+    // Option 3: fileUrl is just the filename, assume it's in invoices/
+    if (!invoice.fileUrl.includes('/')) {
+      pathsToTry.push(path.join(uploadDir, 'invoices', invoice.fileUrl));
+    }
+    
+    console.log('[INVOICE DOWNLOAD] Original fileUrl:', invoice.fileUrl);
     console.log('[INVOICE DOWNLOAD] uploadDir:', uploadDir);
+    console.log('[INVOICE DOWNLOAD] Trying paths:', pathsToTry);
     
-    // Security: ensure the path is within uploads directory
-    const resolvedPath = path.resolve(absolutePath);
-    const uploadsRoot = path.resolve(uploadDir);
-    if (!resolvedPath.startsWith(uploadsRoot)) {
-      console.log('[INVOICE DOWNLOAD] Path security violation. Expected prefix:', uploadsRoot, 'Got:', resolvedPath);
-      return res.status(403).json({ error: 'Invalid file path' });
+    // Find the first path that exists
+    for (const tryPath of pathsToTry) {
+      const resolvedPath = path.resolve(tryPath);
+      const uploadsRoot = path.resolve(uploadDir);
+      
+      // Security check
+      if (!resolvedPath.startsWith(uploadsRoot)) {
+        console.log('[INVOICE DOWNLOAD] Path security violation, skipping:', resolvedPath);
+        continue;
+      }
+      
+      if (fs.existsSync(resolvedPath)) {
+        absolutePath = resolvedPath;
+        console.log('[INVOICE DOWNLOAD] ✅ Found file at:', absolutePath);
+        break;
+      }
     }
     
-    // Check if file exists
-    if (!fs.existsSync(absolutePath)) {
-      console.log('[INVOICE DOWNLOAD] File does not exist on disk:', absolutePath);
+    if (!absolutePath) {
+      console.log('[INVOICE DOWNLOAD] File does not exist at any expected location');
       return res.status(404).json({ error: 'File not found on server. It may have been deleted.' });
     }
     
@@ -2702,31 +2727,60 @@ app.get('/projects/:projectId/uploads/:uploadId', authRequired, async (req, res)
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    // Construct absolute path - upload.filePath is just the filename
-    const absolutePath = path.join(uploadDir, upload.filePath);
-    console.log('[FILE DOWNLOAD] File path:', absolutePath);
+    // Construct absolute path - handle both old and new formats
+    // Old format: relative path from __dirname (e.g., 'uploads/filename.pdf')
+    // New format: just the filename
+    let absolutePath;
+    const pathsToTry = [];
+    
+    // Option 1: New format - just filename
+    pathsToTry.push(path.join(uploadDir, upload.filePath));
+    
+    // Option 2: Old format - already includes 'uploads/' prefix
+    if (upload.filePath.startsWith('uploads/')) {
+      const withoutUploads = upload.filePath.substring('uploads/'.length);
+      pathsToTry.push(path.join(uploadDir, withoutUploads));
+    }
+    
+    console.log('[FILE DOWNLOAD] Original filePath:', upload.filePath);
+    console.log('[FILE DOWNLOAD] uploadDir:', uploadDir);
+    console.log('[FILE DOWNLOAD] Trying paths:', pathsToTry);
     
     const uploadsRoot = path.resolve(uploadDir);
-    const resolvedPath = path.resolve(absolutePath);
-    if (!resolvedPath.startsWith(uploadsRoot)) {
-      console.log('[FILE DOWNLOAD] Invalid file path - security check failed');
-      return res.status(400).json({ error: 'Invalid file path' });
+    
+    // Find the first path that exists and is secure
+    for (const tryPath of pathsToTry) {
+      const resolvedPath = path.resolve(tryPath);
+      
+      // Security check
+      if (!resolvedPath.startsWith(uploadsRoot)) {
+        console.log('[FILE DOWNLOAD] Path security violation, skipping:', resolvedPath);
+        continue;
+      }
+      
+      try {
+        await fs.promises.access(resolvedPath, fs.constants.R_OK);
+        absolutePath = resolvedPath;
+        console.log('[FILE DOWNLOAD] ✅ Found file at:', absolutePath);
+        break;
+      } catch {
+        // File doesn't exist at this path, try next
+      }
     }
-
-    try {
-      await fs.promises.access(absolutePath, fs.constants.R_OK);
-      console.log('[FILE DOWNLOAD] ✅ Sending file:', upload.originalFilename);
-      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, Content-Length');
-      res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
-      res.download(absolutePath, upload.originalFilename, err => {
-        if (err) {
-          console.error('[FILE DOWNLOAD] Error sending file:', err);
-        }
-      });
-    } catch (error) {
-      console.error('[FILE DOWNLOAD] File not accessible:', error);
+    
+    if (!absolutePath) {
+      console.error('[FILE DOWNLOAD] File not accessible at any expected location');
       return res.status(404).json({ error: 'File not found on disk' });
     }
+
+    console.log('[FILE DOWNLOAD] ✅ Sending file:', upload.originalFilename);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, Content-Length');
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+    res.download(absolutePath, upload.originalFilename, err => {
+      if (err) {
+        console.error('[FILE DOWNLOAD] Error sending file:', err);
+      }
+    });
   } catch (error) {
     console.error('[ERROR] Failed to download file:', error);
     res.status(500).json({ error: 'Failed to download file' });
