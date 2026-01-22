@@ -2234,35 +2234,42 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
     }
     
     // Construct absolute path - handle both old and new path formats
-    // Old format: 'uploads/invoices/filename.pdf'
+    // Old format: 'uploads/invoices/filename.pdf' (relative to __dirname)
     // New format: 'invoices/filename.pdf' or just 'filename.pdf'
     let absolutePath;
     
     // Try different path combinations
     const pathsToTry = [];
     
-    // Option 1: fileUrl is already a complete relative path from uploads/
+    // Option 1: Old format - path relative to __dirname with 'uploads/' prefix
+    if (invoice.fileUrl.startsWith('uploads/')) {
+      pathsToTry.push(path.join(__dirname, invoice.fileUrl));
+    }
+    
+    // Option 2: New format - fileUrl is relative from uploadDir (like 'invoices/filename.pdf')
+    pathsToTry.push(path.join(uploadDir, invoice.fileUrl));
+    
+    // Option 3: Old format alternative - strip 'uploads/' and join with uploadDir
     if (invoice.fileUrl.startsWith('uploads/')) {
       const withoutUploads = invoice.fileUrl.substring('uploads/'.length);
       pathsToTry.push(path.join(uploadDir, withoutUploads));
     }
     
-    // Option 2: fileUrl is relative from uploadDir (like 'invoices/filename.pdf')
-    pathsToTry.push(path.join(uploadDir, invoice.fileUrl));
-    
-    // Option 3: fileUrl is just the filename, assume it's in invoices/
+    // Option 4: fileUrl is just the filename, assume it's in invoices/
     if (!invoice.fileUrl.includes('/')) {
       pathsToTry.push(path.join(uploadDir, 'invoices', invoice.fileUrl));
     }
     
     console.log('[INVOICE DOWNLOAD] Original fileUrl:', invoice.fileUrl);
     console.log('[INVOICE DOWNLOAD] uploadDir:', uploadDir);
+    console.log('[INVOICE DOWNLOAD] __dirname:', __dirname);
     console.log('[INVOICE DOWNLOAD] Trying paths:', pathsToTry);
     
     // Find the first path that exists
+    const uploadsRoot = path.resolve(uploadDir);
+    
     for (const tryPath of pathsToTry) {
       const resolvedPath = path.resolve(tryPath);
-      const uploadsRoot = path.resolve(uploadDir);
       
       // Security check
       if (!resolvedPath.startsWith(uploadsRoot)) {
@@ -2274,6 +2281,8 @@ app.get('/projects/:projectId/invoices/:invoiceId/download', authRequired, async
         absolutePath = resolvedPath;
         console.log('[INVOICE DOWNLOAD] ✅ Found file at:', absolutePath);
         break;
+      } else {
+        console.log('[INVOICE DOWNLOAD] File not found at:', resolvedPath);
       }
     }
     
