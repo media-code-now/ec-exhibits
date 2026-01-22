@@ -2854,20 +2854,43 @@ app.delete('/projects/:projectId/uploads/:uploadId', authRequired, async (req, r
       return res.status(400).json({ error: 'File does not belong to this project' });
     }
 
-    // Delete file from filesystem
-    const filePath = path.join(uploadDir, upload.filePath);
-    console.log('[DELETE UPLOAD] Attempting to delete file from disk:', filePath);
+    // Delete file from filesystem - handle both old and new path formats
+    const pathsToTry = [];
+    
+    // Option 1: Old format - path relative to __dirname with 'uploads/' prefix
+    if (upload.filePath.startsWith('uploads/')) {
+      pathsToTry.push(path.join(__dirname, upload.filePath));
+    }
+    
+    // Option 2: New format - just filename, join with uploadDir
+    pathsToTry.push(path.join(uploadDir, upload.filePath));
+    
+    // Option 3: Old format alternative - strip 'uploads/' and join with uploadDir
+    if (upload.filePath.startsWith('uploads/')) {
+      const withoutUploads = upload.filePath.substring('uploads/'.length);
+      pathsToTry.push(path.join(uploadDir, withoutUploads));
+    }
+    
+    console.log('[DELETE UPLOAD] Attempting to delete file, trying paths:', pathsToTry);
 
-    try {
-      await fs.promises.unlink(filePath);
-      console.log('[DELETE UPLOAD] File deleted from disk:', filePath);
-    } catch (fsError) {
-      if (fsError.code === 'ENOENT') {
-        console.warn('[DELETE UPLOAD] File not found on disk, continuing with database deletion:', filePath);
-      } else {
-        console.error('[DELETE UPLOAD] Failed to delete file from disk:', fsError);
-        throw fsError;
+    let fileDeleted = false;
+    for (const filePath of pathsToTry) {
+      try {
+        await fs.promises.unlink(filePath);
+        console.log('[DELETE UPLOAD] File deleted from disk:', filePath);
+        fileDeleted = true;
+        break;
+      } catch (fsError) {
+        if (fsError.code === 'ENOENT') {
+          console.log('[DELETE UPLOAD] File not found at:', filePath, '- trying next path');
+        } else {
+          console.error('[DELETE UPLOAD] Error deleting file:', filePath, fsError);
+        }
       }
+    }
+    
+    if (!fileDeleted) {
+      console.warn('[DELETE UPLOAD] File not found on disk at any expected location, continuing with database deletion');
     }
 
     // Delete database record
