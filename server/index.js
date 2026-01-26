@@ -27,7 +27,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const uploadDir = path.join(__dirname, 'uploads');
+
+// Use UPLOAD_DIR environment variable if set (for Render Disk), otherwise default to local ./uploads
+// In Render, set UPLOAD_DIR to your disk mount point (e.g., /var/data or /opt/render/project/src/server/uploads)
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 const invoicesDir = path.join(uploadDir, 'invoices');
 
 // Create upload directories if they don't exist
@@ -36,6 +39,7 @@ fs.mkdirSync(invoicesDir, { recursive: true });
 
 console.log('[STARTUP] Upload directory:', uploadDir);
 console.log('[STARTUP] Invoices directory:', invoicesDir);
+console.log('[STARTUP] Using persistent storage:', !!process.env.UPLOAD_DIR);
 
 let io;
 
