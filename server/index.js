@@ -1724,6 +1724,29 @@ app.post('/projects/:projectId/stages/:stageId/tasks', authRequired, async (req,
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
+      
+      // Send email notifications to project members (except creator)
+      // Fetch user emails from database
+      const recipientUsers = await prisma.user.findMany({
+        where: {
+          id: { in: recipients }
+        },
+        select: { email: true }
+      });
+      
+      const recipientEmails = recipientUsers.map(u => u.email).filter(email => email);
+
+      if (recipientEmails.length > 0) {
+        console.log('[EMAIL] Sending task notification to:', recipientEmails.join(', '));
+        emailService.sendTaskNotification({
+          to: recipientEmails,
+          projectName: project.name,
+          taskTitle: task.title,
+          stageName: stage.name,
+          assignee: task.assignee || 'Unassigned',
+          dueDate: task.dueDate
+        });
+      }
     }
 
     res.status(201).json({ task });
@@ -2224,6 +2247,28 @@ app.post('/projects/:projectId/invoices', invoiceUpload.single('file'), authRequ
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
+      
+      // Send email notifications to project members (except creator)
+      // Fetch user emails from database
+      const recipientUsers = await prisma.user.findMany({
+        where: {
+          id: { in: recipients }
+        },
+        select: { email: true }
+      });
+      
+      const recipientEmails = recipientUsers.map(u => u.email).filter(email => email);
+
+      if (recipientEmails.length > 0) {
+        console.log('[EMAIL] Sending invoice notification to:', recipientEmails.join(', '));
+        emailService.sendInvoiceNotification({
+          to: recipientEmails,
+          projectName: project.name,
+          invoiceType: invoice.type,
+          amount: invoice.amount,
+          dueDate: invoice.dueDate
+        });
+      }
     }
     emitNotificationSummary(req.user.id);
     
@@ -2735,6 +2780,29 @@ app.post('/projects/:projectId/uploads', upload.array('files'), authRequired, as
     const recipients = memberIds.filter(id => id !== req.user.id);
     if (recipients.length > 0) {
       emitNotificationSummaries(recipients);
+      
+      // Send email notifications to project members (except uploader)
+      // Fetch user emails from database
+      const recipientUsers = await prisma.user.findMany({
+        where: {
+          id: { in: recipients }
+        },
+        select: { email: true }
+      });
+      
+      const recipientEmails = recipientUsers.map(u => u.email).filter(email => email);
+
+      if (recipientEmails.length > 0) {
+        const fileNames = uploads.map(u => u.originalFilename).join(', ');
+        console.log('[EMAIL] Sending file notification to:', recipientEmails.join(', '));
+        emailService.sendFileNotification({
+          to: recipientEmails,
+          projectName: project.name,
+          fileName: fileNames,
+          uploadedBy: req.user.displayName || req.user.email,
+          category: category || 'General'
+        });
+      }
     }
     emitNotificationSummary(req.user.id);
 
