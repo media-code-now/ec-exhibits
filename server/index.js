@@ -667,9 +667,51 @@ app.get('/env/check', (req, res) => {
   res.json({
     hasDatabase: !!process.env.DATABASE_URL,
     hasJWT: !!process.env.JWT_SECRET,
+    hasEmail: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
+    emailConfigured: process.env.EMAIL_USER || 'Not configured',
     nodeEnv: process.env.NODE_ENV,
     databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 20) + '...' : 'NOT SET'
   });
+});
+
+// Email test endpoint - sends a test email to the logged-in user
+app.get('/test/email', authRequired, async (req, res) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      return res.status(500).json({ 
+        error: 'Email service not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.' 
+      });
+    }
+
+    await emailService.sendNotification({
+      to: req.user.email,
+      subject: 'Test Email from EC Exhibits',
+      html: `
+        <h2>✅ Email Service Working!</h2>
+        <p>Hi ${req.user.displayName || req.user.email},</p>
+        <p>This is a test email from your EC Exhibits portal. If you received this, your email service is configured correctly!</p>
+        <p><strong>System Information:</strong></p>
+        <ul>
+          <li>Email sent at: ${new Date().toLocaleString()}</li>
+          <li>User: ${req.user.email}</li>
+          <li>Role: ${req.user.role}</li>
+        </ul>
+      `,
+      text: `Email service is working! This test was sent to ${req.user.email} at ${new Date().toLocaleString()}`
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Test email sent successfully to ' + req.user.email,
+      note: 'Check your inbox (and spam folder) for the test email'
+    });
+  } catch (error) {
+    console.error('[TEST EMAIL] Error:', error);
+    res.status(500).json({ 
+      error: 'Failed to send test email', 
+      details: error.message 
+    });
+  }
 });
 
 // Database connection test endpoint
